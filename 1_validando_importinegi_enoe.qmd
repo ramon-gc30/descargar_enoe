@@ -1,0 +1,112 @@
+---
+title: "Analizando la función `importinegi::enoe`
+date: "22-07-2026"
+format: gfm
+---
+
+En este documento se intentará validar la función `importinegi::enoe`
+
+```{r}
+#| label: setup
+
+library(importinegi)
+```
+
+Actualmente arroja error al momento que utilizarla
+
+```{r}
+importinegi::enoe(2026, "trim1")
+```
+
+El código fuente se encuentra en <https://github.com/crenteriam/importinegi/blob/master/R/enoe.R> 
+
+**PENDIENTE DE VALIDAR CONTROL DE VERSIONES EN GITHUB**
+
+El código es el siguiente:
+
+```{{r}}
+enoe = function(year = NA, trimestre = NA, integrar = FALSE){
+  if (is.na(year) & is.na(trimestre)) {shell.exec("https://www.inegi.org.mx/programas/enoe/15ymas/")}
+  # Temp files
+  temp.enoe = tempfile()
+  zipdir     = tempdir()
+  formato = "dbf"
+
+  # Descargar
+  if (year >= 2020 & !(year == 2020 & trimestre == 'trim1')) {
+    url.base = paste("https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_n",year,trimestre,paste0(formato,".zip"), sep = "_")
+  } else {
+    url.base = paste0("http://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/", year, trimestre,  "_", formato, ".zip")
+  }
+  utils::download.file(url.base, temp.enoe)
+  utils::unzip(temp.enoe, exdir = zipdir)
+  list_dataraw = list.files(zipdir, pattern = paste0(formato,'$'), full.names = T)
+  list_names = basename(tools::file_path_sans_ext(list_dataraw))
+  # Read all files in the folder
+  output = lapply(list_dataraw, rio::import)
+  names(output) = list_names
+
+  # INTEGRAR - TRUE  FALSE
+  if (integrar == TRUE) {
+    output = Reduce(function(x, y) merge(x,y, all= TRUE), output)
+  }
+
+  # Return Object
+  return(output)
+}
+# Fin de la funcion
+```
+
+Arroja error al momento de extraer el archivo comprimido, se valida dicho archivo modificando tal función
+
+```{r}
+enoe = function(year = NA, trimestre = NA, integrar = FALSE){
+  # if (is.na(year) & is.na(trimestre)) {shell.exec("https://www.inegi.org.mx/programas/enoe/15ymas/")}
+  # Temp files
+  temp.enoe = tempfile()
+  zipdir     = tempdir()
+  formato = "dbf"
+
+  # Descargar
+  if (year >= 2020 & !(year == 2020 & trimestre == 'trim1')) {
+    url.base = paste("https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_n",year,trimestre,paste0(formato,".zip"), sep = "_")
+  } else {
+    url.base = paste0("http://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/", year, trimestre,  "_", formato, ".zip")
+  }
+  utils::download.file(url.base, temp.enoe)
+  # utils::unzip(temp.enoe, exdir = zipdir)
+  
+  return(temp.enoe)
+
+}
+```
+
+Ahora se define una variable que contiene la ruta del archivo descargado
+
+```{r}
+archivo_zip <- enoe(2026, "trim1")
+archivo_zip
+```
+
+Se validan los archivos contenidos
+
+```{{r}}
+unzip(archivo_zip, list = TRUE)
+```
+
+Arroja el siguiente error
+
+```
+Error en unzip(archivo_zip, list = TRUE): 
+  archivo zip 'C:\Users\RAMONG~1\AppData\Local\Temp\RtmpUF8Fs5\file55e847e44b37' no pueden ser cargadas
+```
+
+Aparece dicho archivo?
+
+```{r}
+list.files(tempdir())
+```
+
+Sí aparece, pero por qué no lo extrae?
+
+Añadiendo la extensión y aumentando el tiempo de descarga se mantiene el error
