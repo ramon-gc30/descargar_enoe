@@ -1,0 +1,118 @@
+---
+date: "26-07-2026"
+format: gfm
+---
+
+En este documento se tratará de mejorar la función `descargar_enoe`
+
+```{r}
+library(tidyverse)
+library(here)
+
+source(here::here("0_funciones.R"))
+url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_2026_trim1_csv.zip"
+```
+
+Actualmente, la función realiza lo siguiente
+
+```{r}
+  # Datos de entrada ----
+  
+  # Almacena la ruta del directorio temporal
+  dir_temp <- tempdir(check = TRUE)
+  
+  # Crea un archivo temporal que contendrá el archivo descargado
+  archivo_temp <- tempfile(tmpdir = dir_temp, fileext = ".zip")
+  
+  # Proceso de descarga ----
+  
+  # tiempo máximo de descarga 15 min
+  options(timeout = max(900, getOption("timeout")))
+  
+  download.file(url, destfile = archivo_temp) # descarga
+  
+  # ruta del archivo comprimido
+  archivo_temp <- list.files(dir_temp, pattern = "\\.zip$", full.names = TRUE)
+  
+  # proceso de extracción ----
+  
+  # lo almacena en el directorio temporal
+  unzip(zipfile = archivo_temp, exdir = dir_temp)
+  
+  # proceso de carga ----
+  
+  # ruta de los archivos extraídos
+  enoe <- list.files(dir_temp, pattern = "\\.csv", full.names = TRUE)
+```
+
+Donde `enoe` contiene la ruta de todos los archivos descomprimidos, es decir, en formato csv
+
+```{r}
+enoe
+```
+
+Después cargo cada archivo según la posición del elemento
+
+```{{r}}
+# cuestionario de ocupación y empleo 1
+  coe1 <- read_csv(
+    enoe[grepl("COE1", enoe)],
+    col_types = cols(.default = col_character())
+  )
+```
+
+Donde
+
+```{r}
+enoe[grepl("COE1", enoe)]
+```
+
+O bien, puede ser así
+
+```{r}
+grepv("coe1", enoe, ignore.case = TRUE)
+```
+
+Se realiza dicha modificación en el script correspondiente y se vuelve a ejecutar, pero antes se eliminan los archivos previamente descargados
+
+```{r}
+  archivo_temp <- list.files(
+    dir_temp, 
+    pattern = "\\.zip$|\\.csv$", 
+    full.names = TRUE
+  )
+  
+  # eliminación de archivos descargados
+  unlink(archivo_temp) 
+```
+
+Ahora sí se vuelve a ejecutar
+
+```{r}
+enoe <- descargar_enoe(url)
+
+enoe
+```
+
+Listo!
+
+Para llamar cada cuestionario
+
+```{r}
+enoe$viv
+```
+
+Además, se hace en un paso anterior crear el objeto que contiene la lista. Se valida
+
+```{r}
+enoe <- descargar_enoe(url)
+
+enoe
+```
+
+Para seleccionar un cuestionario
+
+```{r}
+enoe$sdem
+```
+
