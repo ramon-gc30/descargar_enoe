@@ -1,0 +1,321 @@
+---
+date: "26-07-2026"
+format: gfm
+---
+
+En este documento se validará la función que obtiene los microdatos, de un modúlo o cuestionario, de la ENOE, es decir, la función `descargar_microdatos_enoe`. En específico,
+
+```{{r}}
+unzip(
+    archivo_temp, 
+    # cuestionario especifico
+    files = microdatos[grepl(cuestionario, microdatos)],
+    exdir = dir_temp
+  )
+```
+
+Este documento contiene la síntesis de las ideas plasmadas en `bitacora/10_extraer_sdem.qmd`.
+
+En primer lugar, ¿qué hace `grepl`? Buscan elementos coincidentes en un vector de caracteres, existen tres variantes: 
+
+* `grep`: devuelve el índice (posición) en donde existe coincidencia
+* `grepv`: devuelve el valor del elemento en donde existe coincidencia,
+* `grepl`: devuelve un valor lógico (VERDADERO o FALSO) del tamaño del vector dependiendo si existe coincidencia o no.
+
+Además, están las funciones
+
+* `sub`
+* `gsub`
+* `regexpr`
+* `gregexpr`
+* `regexec`
+* `gregexec`
+
+Vamos a explorar una por una.
+
+En primer lugar, validemos la función `descargar_microdatos_enoe` en su versión actual
+
+```{r}
+url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_2026_trim1_csv.zip"
+cuestionario <- "SDEM"
+
+# Almacena la ruta del directorio temporal
+  dir_temp <- tempdir(check = TRUE)
+  
+  # Crea un archivo temporal que contendrá el archivo descargado
+  archivo_temp <- tempfile(tmpdir = dir_temp, fileext = ".zip")
+  
+  # Proceso de descarga ----
+  # tiempo máximo de descarga 15 min
+  options(timeout = max(900, getOption("timeout")))
+  
+  download.file(url, destfile = archivo_temp) # descarga
+  
+  # ruta del archivo comprimido
+  archivo_temp <- list.files(dir_temp, pattern = "\\.zip$", full.names = TRUE)
+  
+  # lista de los microdatos comprimidos
+  microdatos <- unzip(archivo_temp, list = TRUE)$Name
+  
+  # unzip(
+  #   archivo_temp, 
+  #   # cuestionario especifico
+  #   files = microdatos[grepl(cuestionario, microdatos)],
+  #   exdir = dir_temp
+  # )
+```
+
+Esta función
+
+1. Especifica la ruta del directorio temporal
+2. Crea un archivo temporal con extensión zip en el directorio temporal
+3. Descarga el archivo especificado en `url` y lo almacena en el archivo temporal
+4. Enlista los archivos contenidos en el archivo zip
+5. Extrae solamente el archivo especificado en el argumento `cuestionario`
+
+Hasta este momento, `microdatos` contiene los archivos contenidos en el archivo comprimido
+
+```{r}
+microdatos
+```
+
+Mientras que, `archivo_temp` la ruta del archivo comprimido
+
+```{r}
+archivo_temp
+```
+
+Y `dir_temp` la ruta del directorio temporal de la sesión actual
+
+```{r}
+dir_temp
+```
+
+Ahora validemos el uso de `grep`. En su versión actual, devuelve esto
+
+```{r}
+microdatos[grepl(cuestionario, microdatos)]
+```
+
+Es decir, busca `SDEM` en cada elemento del vector `microdatos` y devuelve el valor del elemento coincidente. Pero si se especifica solamente `grepl` solamente devuelve un valor lógico
+
+```{r}
+microdatos
+
+grepl(cuestionario, microdatos)
+```
+
+Es decir, `objeto[condición]` al parecer solamente trabaja solamente los elementos del vector que cumplen con la condición. Por ejemplo, `sum(objeto[condición])` recordemos que suma solamente aquellos elementos que cumplen con la condición. Se valida
+
+```{r}
+microdatos[microdatos == "ENOE_SDEMT126.csv"]
+```
+
+Se observa que devuelve el elemento coincidente. Se hace un ejemplo de un vector numérico.
+
+```{r}
+a <- 1:10
+a
+```
+
+```{r}
+a[a <= 5]
+
+sum(a[a <= 5])
+```
+
+Se podría decir que `objeto[condición]` devuelve un subvector que contiene los elementos que cumplen con dicha condición. En este caso, el vector `a` devuelve 5 elementos y después se suman para obtener 15. 
+
+Entonces, regresando al ejemplo 
+
+```{r}
+grepl(cuestionario, microdatos)
+```
+
+Devuelve un vector del mismo tamaño que en donde se busca la coincidencia con valores lógicos según si cada elemento coincide con el patrón especificado, o no. Asimismo,
+
+```{r}
+microdatos[grepl(cuestionario, microdatos)]
+```
+
+Devuelve solamente aquellos elementos que cumplen con la condición. Por ejemplo
+
+```{r}
+grepl("SDEM|HOG", microdatos)
+```
+
+Solamente dos elementos coinciden con el patrón especificado. Así pues, devolverá dos elementos
+
+```{r}
+microdatos[grepl("SDEM|HOG", microdatos)]
+```
+
+Por su parte, 
+
+```{r}
+grep(cuestionario, microdatos)
+grepv(cuestionario, microdatos)
+grepl(cuestionario, microdatos)
+```
+
+Se observa que:
+
+* `grep` devuelve el o los elementos coincidentes,
+* `grepv`: el valor del elemento coincidente,
+*`grepl `: devuelve un vector del mismo tamaño que contiene valores lógicos según el tipo de coincidencia,
+
+Mientras que,
+
+```{r}
+regexpr(cuestionario, microdatos)
+# regexpr(cuestionario, microdatos)
+```
+
+`regexpr` devuelve la posición inicial y la longitud del elemento buscado, 
+
+```{r}
+gregexpr(cuestionario, microdatos)
+```
+
+Devuelve lo mismo que `regexpr` pero por cada elemento del vector aunque no coincida
+
+```{r}
+regexec(cuestionario, microdatos)
+```
+
+Es lo mismo, en apariencia, a `gregexpr`
+
+```{r}
+gregexec(cuestionario, microdatos)
+```
+
+También es lo mismo que `gregexpr` y `regexec` pero devuelve la coincidencia en forma matricial.
+
+Por otra parte, qué pasa si `cuestionario = sdem`
+
+```{r}
+microdatos
+cuestionario <- "sdem"
+
+grepl(pattern = cuestionario, x = microdatos)
+```
+
+No encuentra ningún elemento coincidente aunque este `SDEM`, para corregirlo se añade `ignore.case = TRUE` que no distingue mayúsculas y minúsculas
+
+```{r}
+grepl(pattern = cuestionario, x = microdatos, ignore.case = TRUE)
+```
+
+Así pues, se modifica 
+
+```{{r}}
+  unzip(
+    archivo_temp, 
+    # cuestionario especifico
+    files = microdatos[grepl(cuestionario, microdatos)],
+    exdir = dir_temp
+  )
+```
+
+A
+
+```{{r}}
+  unzip(
+    archivo_temp, 
+    # cuestionario especifico
+    files = grepv(cuestionario, microdatos),
+    exdir = dir_temp
+  )
+```
+
+Se valida función 
+
+```{r}
+library(tidyverse)
+library(here)
+
+source(here::here("0_funciones.R"))
+```
+
+Por ejemplo, se intentará descargar el módulo sociodemográfico para calcular las tasas complementarias de ocupación y desocupación correspondiente al primer trimestre de 2026.
+
+```{{r}}
+url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_2026_trim1_csv.zip"
+cuestionario <- "sdem"
+
+descargar_microdatos_enoe(url, "sdem")
+```
+
+Arroja error 
+
+```
+2.
+microdatos <- unzip(archivo_temp, list = TRUE)$Name at 0_funciones.R#101
+1.
+descargar_microdatos_enoe(url, "sdem")
+
+```
+
+¿Por qué? Porque en
+
+```{{r}}
+archivo_temp <- list.files(dir_temp, pattern = "\\.zip$", full.names = TRUE)
+
+```
+
+Existen más de un archivo comprimido en el directorio temporal
+
+```{r}
+list.files(dir_temp)
+list.files(tempdir())
+```
+
+Por tanto, 
+
+```{r}
+list.files(dir_temp, pattern = "\\.zip$", full.names = TRUE)
+```
+
+Devuelve más de un archivo. Existen dos maneras de solucionarlo:
+
+1. Eliminar archivos zip antes de descargar los microdatos
+2. Especificar el archivo específico mediante `tempfile(pattern)`
+
+```{r}
+tempfile()
+tempfile(pattern = "enoe")
+list.files(tempdir())
+```
+
+No se hace ninguna modificación, ya que estos archivos zip están porque realicé la función previamente y al final de la función se eliminan por lo tanto, no se realiza ninguna adición, solamente se eliminan los archivos previamente descargados.
+
+```{r}
+list.files(tempdir())
+unlink(list.files(dir_temp, pattern = "\\.zip$|\\.csv$", full.names = TRUE))
+list.files(tempdir())
+```
+
+Se vuelve a ejecutar la función
+
+```{r}
+url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_2026_trim1_csv.zip"
+cuestionario <- "sdem"
+
+descargar_microdatos_enoe(url, "sdem")
+```
+
+Se hace la prueba para cada cuestionario o módulo
+
+```{r}
+descargar_microdatos_enoe(url, "hog")
+
+descargar_microdatos_enoe(url, "viv")
+
+descargar_microdatos_enoe(url, "coe1")
+
+descargar_microdatos_enoe(url, "coe2")
+
+```
+
+Listo!!!
+
