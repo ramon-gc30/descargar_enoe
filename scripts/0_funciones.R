@@ -30,35 +30,31 @@ descargar_enoe <- function(url){
   # ruta de los archivos extraídos
   enoe <- list.files(dir_temp, pattern = "\\.csv", full.names = TRUE)
   
-  # cuestionario de ocupación y empleo 1
-  coe1 <- read_csv(
-    grepv("coe1", enoe, ignore.case = TRUE),
-    col_types = cols(.default = col_character())
-  )
+  # para la lista
+  nombres <- basename(enoe)
   
-  # cuestionario de ocupación y empleo 2
-  coe2 <- read_csv(
-    grepv("coe2", enoe, ignore.case = TRUE),
-    col_types = cols(.default = col_character())
-  )
+  nombres <- sub(
+    x = nombres,
+    pattern = "ENOE_", # se elimina prefijo ENOE
+    replacement = ""
+  ) 
   
-  # hogar
-  hog <- read_csv(
-    grepv("hog", enoe, ignore.case = TRUE), 
-    col_types = cols(.default = col_character())
-  )
+  nombres <- sub(
+    x = nombres,
+    pattern = ".csv",
+    replacement = "" # se elimina extensión
+  ) 
   
-  # sociodemográfico
-  sdem <- read_csv(
-    grepv("sdem", enoe, ignore.case = TRUE),
-    col_types = cols(.default = col_character())
-  )
-  
-  # vivienda
-  viv <- read_csv(
-    grepv("viv", enoe, ignore.case = TRUE), 
-    col_types = cols(.default = col_character())
-  )
+  # se crea lista que contiene todos los módulos
+  enoe <- enoe |> 
+    set_names(nm = nombres) |> 
+    map(
+      \(enoe)
+      readr::read_csv(
+        file = enoe,
+        col_types = cols(.default = col_character())
+      )
+    )
   
   # proceso de eliminación ----
   
@@ -75,22 +71,14 @@ descargar_enoe <- function(url){
   # eliminación de objetos creados
   # remove(list = c("archivo_temp", "dir_temp", "enoe", "url")) 
   
-  enoe <- list(
-    coe1 = coe1, 
-    coe2 = coe2, 
-    hog = hog, 
-    sdem = sdem, 
-    viv = viv
-  )
-  
   return(enoe)
   
 }
 
 # Obtener solamente un módulo =================================================
 
-descargar_microdatos_enoe <- 
-  function(url, cuestionario = c("hog", "viv", "sdem", "coe1", "coe2"))
+descargar_modulo <- 
+  function(url, modulo = c("hog", "viv", "sdem", "coe1", "coe2"))
 {
   # Datos de entrada ----
   
@@ -114,8 +102,8 @@ descargar_microdatos_enoe <-
   
   unzip(
     archivo_temp, 
-    # cuestionario especifico
-    files = grepv(cuestionario, microdatos, ignore.case = TRUE),
+    # modulo especifico
+    files = grepv(modulo, microdatos, ignore.case = TRUE),
     exdir = dir_temp
   )
   
@@ -131,7 +119,7 @@ descargar_microdatos_enoe <-
   unlink(archivo_temp)
   
   # objetos creados
-  # remove(list = c("archivo_temp", "cuestionario", "dir_temp", "url"))
+  # remove(list = c("archivo_temp", "modulo", "dir_temp", "url"))
   
   return(microdatos)
 }
