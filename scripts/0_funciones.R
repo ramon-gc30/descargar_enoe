@@ -174,7 +174,8 @@ descargar_enoe_n <- function(year, trimestre, formato)
   archivo_temp <- list.files(
     path = tempdir(),
     pattern = "\\.csv$|\\.dbf$|\\.dta$|\\.sav$",
-    full.names = TRUE
+    full.names = TRUE,
+    ignore.case = TRUE
   )
   
   # nombre para la lista
@@ -189,7 +190,8 @@ descargar_enoe_n <- function(year, trimestre, formato)
   nombres <- sub(
     x = nombres,
     pattern = "\\.csv|\\.dbf|\\.dta|\\.sav",
-    replacement = ""
+    replacement = "",
+    ignore.case = TRUE
   )
   
   # especificar formato para importación
@@ -227,10 +229,113 @@ descargar_enoe_n <- function(year, trimestre, formato)
   archivo_temp <- list.files(
     path = tempdir(),
     pattern = "\\.zip$|\\.csv$|\\.dbf$|\\.dta$|\\.sav$",
-    full.names = TRUE
+    full.names = TRUE,
+    ignore.case = TRUE
   )
   
   unlink(archivo_temp)
   
   return(enoe)
 }
+
+# Obtener un módulo sin enlace ================================================
+
+descargar_modulo_n <- function(year, trimestre, modulo, formato)
+{
+  url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/"
+  
+  # obtener enlaces según el periodo
+  if (year >= 2023) {
+    url <- paste(url, "enoe_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else if ((year == 2020 & trimestre >= 3 ) | (year >= 2021 & year <= 2022)) {
+    url <- paste(url, "enoe_n_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else {
+    url <- paste(url, year, "trim", trimestre, "_", formato, ".zip", sep = "")
+  }
+  
+  # enlaces con casos especiales
+  # doble barra
+  if (year == 2024 & trimestre == 2) {
+    url <- sub(
+      x = url,
+      pattern = "/enoe_2024",
+      replacement = "//enoe_2024"
+    )
+  } else if (year == 2020 & trimestre == 2) {
+    # no existe enlace
+    stop("No existe enlace para dicho periodo. Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio: <https://www.inegi.org.mx/investigacion/etoe/default.html#Microdatos>. Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son una aproximación a los indicadores de la ENOE. La comparación es útil como medida de referencia.")
+  }
+  
+  # proceso de descarga
+  archivo_temp <- tempfile(fileext = ".zip")
+  
+  # se aumenta tiempo máximo de descarga para evitar error
+  options(timeout = max(900, getOption("timeout")))
+  
+  download.file(
+    url = url,
+    destfile = archivo_temp
+  )
+  
+  # lista de los microdatos comprimidos
+  microdatos <- unzip(archivo_temp, list = TRUE)$Name
+  
+  # extracción
+  unzip(
+    zipfile = archivo_temp, 
+    # modulo especifico
+    files = grepv(modulo, microdatos, ignore.case = TRUE),
+    exdir = tempdir()
+  )
+  
+  # ruta para cargar archivos
+  archivo_temp <- list.files(
+    path = tempdir(),
+    pattern = "\\.csv$|\\.dbf$|\\.dta$|\\.sav$",
+    full.names = TRUE,
+    ignore.case = TRUE
+  )
+  
+  # nombre para la lista
+  nombres <- basename(archivo_temp)
+  
+  nombres <- sub(
+    x = nombres,
+    pattern = "ENOE_",
+    replacement = ""
+  )
+  
+  nombres <- sub(
+    x = nombres,
+    pattern = "\\.csv|\\.dbf|\\.dta|\\.sav",
+    replacement = "",
+    ignore.case = TRUE
+  )
+  
+  # importación según tipo de archivo
+  if (formato == "csv") {
+    enoe <- readr::read_csv(
+      file = archivo_temp,
+      col_types = cols(.default = col_character())
+    )
+  } else if (formato == "dbf") {
+    enoe <- foreign::read.dbf(archivo_temp)
+  } else if (formato == "dta") {
+    enoe <- haven::read_dta(archivo_temp)
+  } else if (formato == "sav") {
+    enoe <- haven::read_sav(archivo_temp)
+  }
+  
+  # eliminación de archivos descargados y extraídos
+  archivo_temp <- list.files(
+    path = tempdir(),
+    pattern = "\\.zip$|\\.csv$|\\.dbf$|\\.dta$|\\.sav$",
+    full.names = TRUE,
+    ignore.case = TRUE
+  )
+  
+  unlink(archivo_temp)
+  
+  return(enoe)
+}
+
