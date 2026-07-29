@@ -2,7 +2,7 @@
 Ramón Carrillo
 2028-02-07
 
-## Introducción
+# Introducción
 
 Este repositorio pretende generar el código fuente que permita descargar
 los microdatos de la ENOE directamente del repositorio del INEGI.
@@ -13,11 +13,46 @@ if (require(pacman) == FALSE) {
   library(pacman)
 } 
 
-pacman::p_load(tidyverse, here, importinegi)
+pacman::p_load(tidyverse, here, importinegi, foreign, haven)
 source(here::here("scripts", "0_funciones.R"))
 ```
 
-## Modos de obtener microdatos de la ENOE en R
+# Descripción
+
+## Funciones
+
+Las funciones desarrolladas son las siguientes:
+
+```` markdown
+```{r}
+# library(tidyverse)
+descargar_enoe_n(year, trimestre, formato)
+descargar_modulo_n(year, trimestre, modulo, formato)
+```
+````
+
+- `descargar_enoe_n(year, trimestre, formato)`: obtiene los microdatos
+  de TODOS los módulos, devuelve una lista donde cada elemento contiene
+  cada módulo de la ENOE,
+
+- `descargar_modulo_n(year, trimestre, modulo, formato)`: obtiene los
+  microdatos de un módulo y devuelve ya sea un tibble (si se
+  especificaron los formatos CSV, STA, SAV) o un data frame (en el caso
+  de DBF).
+
+## Argumentos
+
+- `year`: año de levantamiento de la encuesta (2005 a la actualidad),
+- `trimestre`: trimestre de levantamiento (1 a 4),
+- `formato`: formato del archivo a descargar (CSV, DBF, STA, SAV),
+- `modulo`: tabla a seleccionar (INEGI, 2023, pp. 1-2):
+  - `hog`: hogar,
+  - `viv`: vivienda,
+  - `sdem`: sociodemográfico
+  - `coe1`: cuestionario de ocupación y empleo I,
+  - `coe2`: cuestionario de ocupación y empleo II,
+
+# Detalles
 
 Existen tres maneras de importar los microdatos de la ENOE
 
@@ -26,21 +61,28 @@ Existen tres maneras de importar los microdatos de la ENOE
 2.  Utilizando el paquete `importinegi` (Rentería, 2020),
 3.  Descargando el archivo directamente en el repositorio del INEGI
 
-El más sencillo de realizar es la opción 1, anque dificulta la
+El más sencillo de realizar es la opción 1, aunque dificulta la
 reproducibilidad del proyecto.
 
 En cambio el paquete `importinegi` no permite obtener archivos más allá
-del año 2022. Por ejemplo, se desea obtener los microdatos del segundo
-trimestre de 2023.
+del año 2022. Por ejemplo, si se desea obtener los microdatos del
+segundo trimestre de 2023.
 
-``` r
+```` markdown
+```{r}
 # library(importinegi)
 
 importinegi::enoe(2023, "trim2")
 ```
+````
 
-    Warning in utils::unzip(temp.enoe, exdir = zipdir): error 1 al extraer del
-    archivo zip
+Arrojará el siguiente error
+
+    probando la URL 'https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_n_2023_trim2_dbf.zip'
+    Content type 'text/html' length 2263 bytes
+    downloaded 2263 bytes
+
+    simpleWarning in utils::unzip(temp.enoe, exdir = zipdir): error 1 al extraer del archivo zip
 
     named list()
 
@@ -64,6 +106,20 @@ if (year >= 2020 & !(year == 2020 & trimestre == 'trim1')) {
   }
 ```
 ````
+
+En ese sentido, la función `descargar_enoe_n` puede considerarse como
+una actualización de `importinegi::enoe` en cuanto a que:
+
+- Actualiza los enlaces hasta la publicación de este documento (finales
+  de julio de 2026),
+- Evita posibles errores cuando la descarga supera el tiempo máximo
+  establecido,
+- Permite la descarga de archivos de distinto formato,
+- Mejora (al simplificar) la creación del objeto a retornar de la
+  función
+
+Para realizar esto último se tomo como fuente el código mostrado por
+Wickham y otros (2023, sección 26.3.4).
 
 En cuanto a descargar los microdatos directamente del repositorio del
 INEGI, existen aproximaciones previas (Martínez Sánchez, 2017; Pacheco
@@ -143,160 +199,169 @@ enoe = function(year = NA, trimestre = NA, integrar = FALSE){
 ```
 ````
 
-Solamente que aquí, como se mencionó anteriormente, ya viene incorporado
-el enlace (con las respectivas desventajas que conlleva como, entre
-otros, que arroje error si el instituto cambia la sintaxsis del enlace).
-
-## Funciones desarrolladas
-
-En ese sentido, las funciones desarrolladas en este espacio tampoco se
-alejan de la idea principal de estas aproximaciones en cuanto a que
-primero se crean los archivos temporales, posteriormente se descargar y
-por último se extraen.
-
-No obstante, pretendemos desglosar este proceso de obtención en dos
-funciones:
-
-1.  Obtiene todos los microdatos de la ENOE, es decir, de todos los
-    módulos o cuestionarios
-2.  Descargar los microdatos de un módulo en específico
-
-Se realiza de esta manera debido a que a veces es necesario trabajar
-solamente con los microdatos de un módulo. Por ejemplo, al estimar el
-total de la población o calcular los indicadores del mercado laboral
-mexicano. Aquello posible con los campos precodificados ubicados
-principalmente en el módulo sociodemográfico, véase INEGI (2023) para
-más información.
-
-Así pues, las funciones desarrolladas son las siguientes:
-
-```` markdown
-```{r}
-# library(tidyverse)
-descargar_enoe(url)
-descargar_microdatos_enoe(url, cuestionario)
-```
-````
-
-- `descargar_enoe(url)`: obtiene los microdatos de TODOS los módulos
-  donde `url` debe contener el enlace de los microdatos en formato CSV y
-  devuelve una lista donde cada elemento contiene cada módulo de la ENOE
-  en formato tibble.
-
-- `descargar_microdatos_enoe(url, cuestionario)`: obtiene los microdatos
-  de un módulo donde en `cuestionario` se especifica el módulo de
-  interés. Actualmente acepta los siguiente valores:
-
-  - `hog`: hogar,
-  - `viv`: vivienda,
-  - `sdem`: sociodemográfico,
-  - `coe1` y `coe2`: cuestionario de ocupación y empleo I y II,
-    respectivamente
-
-Esta función devuelve un objeto tipo tibble del módulo correspondiente.
-
-En ambos casos, el proceso es el siguiente
-
-1.  Almacenar la ruta del directorio y archivo temporal
-2.  Descargar el archivo comprimido directamente en el repositorio del
-    INEGI y guardarlo en el archivo temporal
-3.  Extraer el o los archivos contenidos en el archivo comprimido
-4.  Definir los datos como datos ordenados (tibbles)
-5.  Eliminar los archivos descargados y extraídos
-
-De los casos descritos anteriormente, en este código se añade una opción
-que aumenta el tiempo máximo de descarga de 1 minuto (por defecto) a 15
-minutos mediante la función `options` ya que a veces puede arrojar error
-si el archivo no se descarga en el tiempo establecido por defecto.
-
-Además, los microdatos están en objetos tipo tibble que facilita la
-manipulación de datos. Por lo cual, requiere el paquete `tidyverse`
-(Wickham et. al., 2019)
-
-Por ejemplo, se desea obtener los microdatos de todos los módulos
-correspondientes al segundo trimestre de 2025:
+En ese sentido, las versiones previas de las funciones descritas
+anteriormente (`descargar_enoe` y `descargar_modulo`) requerían el
+enlace. Por ejemplo,
 
 ``` r
-url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_2025_trim2_csv.zip"
+descargar_modulo(
+  url = "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_2025_trim1_csv.zip",
+  modulo = "sdem"
+)
+```
 
-enoe <- descargar_enoe(url)
+    # A tibble: 423,302 × 114
+       r_def loc   mun   est   est_d_tri est_d_men ageb  t_loc_tri t_loc_men cd_a 
+       <chr> <chr> <chr> <chr> <chr>     <chr>     <chr> <chr>     <chr>     <chr>
+     1 0     <NA>  11    30    681       661       0     1         1         1    
+     2 0     <NA>  8     20    123       123       0     1         1         1    
+     3 0     <NA>  8     20    123       123       0     1         1         1    
+     4 0     <NA>  10    20    680       660       0     1         1         1    
+     5 0     <NA>  10    40    682       667       0     1         1         1    
+     6 0     <NA>  97    40    795       751       0     4         4         2    
+     7 0     <NA>  98    30    187       187       0     1         1         2    
+     8 0     <NA>  31    20    921       880       0     1         1         3    
+     9 0     <NA>  114   30    974       925       0     1         1         4    
+    10 0     <NA>  114   30    974       925       0     1         1         4    
+    # ℹ 423,292 more rows
+    # ℹ 104 more variables: ent <chr>, con <chr>, upm <chr>, d_sem <chr>,
+    #   n_pro_viv <chr>, v_sel <chr>, n_hog <chr>, h_mud <chr>, n_ent <chr>,
+    #   per <chr>, n_ren <chr>, c_res <chr>, par_c <chr>, sex <chr>, eda <chr>,
+    #   nac_dia <chr>, nac_mes <chr>, nac_anio <chr>, l_nac_c <chr>, cs_p12 <chr>,
+    #   cs_p13_1 <chr>, cs_p13_2 <chr>, cs_p14_c <chr>, cs_p15 <chr>, cs_p16 <chr>,
+    #   cs_p17 <chr>, n_hij <chr>, e_con <chr>, cs_p20a_1 <chr>, cs_p20a_c <chr>, …
+
+No obstante, consideramos que las versiones actuales facilitan la
+automatización de dicha descarga.
+
+Así pues, el proceso computacional de las funciones desarrolladas en
+este espacio es el siguiente:
+
+1.  Se obtiene el enlace según el periodo especificado (año y
+    trimestre),
+2.  Se descarga el archivo (comprimido) correspondiente,
+3.  Se cargan los archivos extraídos según el tipo de formato.
+
+En específico, se generaron dos funciones debido a que a veces es
+necesario trabajar solamente con los microdatos de un módulo en
+específico, por ejemplo, estimar el total de la población o calcular los
+indicadores del mercado laboral mexicano se requiere los campos
+precodificados ubicados en el tabla sociodemográfica (`SDEM`), véase
+INEGI (2023) para más información.
+
+# Actualizaciones
+
+La versión actual de las funciones `descargar_enoe_n` y
+`descargar_modulo_n` superan las limitaciones presentadas en
+`descargar_enoe` y `descargar_modulo` donde:
+
+- Ya no es necesario ingresar manualmente el enlace: solamente debe
+  especificarse el año y el trimestre de interés,
+- Permite descargar desde todos los formatos disponibles en el
+  repositorio del INEGI (además del CSV): DBF, STA, SAV,
+- Algunas pruebas realizadas validan su ejecución incluso en periodos
+  lejanos al actual
+
+# Ejemplos
+
+## Ejemplo 1
+
+Se desea obtener los microdatos correspondientes al tercer trimestre de
+2024.
+
+``` r
+enoe <- descargar_enoe_n(2024, 3, "csv")
+
+class(enoe)
+```
+
+    [1] "list"
+
+``` r
 names(enoe)
 ```
 
-    [1] "coe1" "coe2" "hog"  "sdem" "viv" 
+    [1] "COE1T324" "COE2T324" "HOGT324"  "SDEMT324" "VIVT324" 
 
-Para manipular cada módulo simplemente se define. Por ejemplo, se desea
-trabajar con los datos del cuestionario sociodemográfico
+Se observa que la función devuelve un objeto tipo lista. Puede definir
+cada objeto de forma separada, por ejemplo `sdem <- enoe$SDEMT324`, o
+bien puede utilizar `list2env` que crea n objetos en el entorno de
+trabajo especificado según el número de objetos contenidos en la lista
+`x`. Por ejemplo, se crean los objetos contenidos en `enoe` en el
+entorno global.
 
 ``` r
-sdem <- enoe$sdem
+list2env(enoe, envir = .GlobalEnv)
+```
+
+    <environment: R_GlobalEnv>
+
+``` r
+objects(pattern = "T324")
+```
+
+    [1] "COE1T324" "COE2T324" "HOGT324"  "SDEMT324" "VIVT324" 
+
+Ahora se puede trabajar con cada conjunto de datos de forma separada.
+
+``` r
+SDEMT324
+```
+
+    # A tibble: 423,118 × 114
+       r_def loc   mun   est   est_d_tri est_d_men ageb  t_loc_tri t_loc_men cd_a 
+       <chr> <chr> <chr> <chr> <chr>     <chr>     <chr> <chr>     <chr>     <chr>
+     1 0     <NA>  11    20    123       <NA>      0     1         <NA>      1    
+     2 0     <NA>  11    20    123       <NA>      0     1         <NA>      1    
+     3 0     <NA>  2     30    124       112       0     1         1         1    
+     4 0     <NA>  6     30    676       637       0     1         1         1    
+     5 0     <NA>  14    40    125       116       0     1         1         1    
+     6 0     <NA>  57    30    205       188       0     1         1         1    
+     7 0     <NA>  81    20    804       <NA>      0     2         <NA>      1    
+     8 0     <NA>  70    20    207       <NA>      0     2         <NA>      1    
+     9 0     <NA>  29    20    204       190       0     1         1         1    
+    10 0     <NA>  58    30    205       188       0     1         1         1    
+    # ℹ 423,108 more rows
+    # ℹ 104 more variables: ent <chr>, con <chr>, upm <chr>, d_sem <chr>,
+    #   n_pro_viv <chr>, v_sel <chr>, n_hog <chr>, h_mud <chr>, n_ent <chr>,
+    #   per <chr>, n_ren <chr>, c_res <chr>, par_c <chr>, sex <chr>, eda <chr>,
+    #   nac_dia <chr>, nac_mes <chr>, nac_anio <chr>, l_nac_c <chr>, cs_p12 <chr>,
+    #   cs_p13_1 <chr>, cs_p13_2 <chr>, cs_p14_c <chr>, cs_p15 <chr>, cs_p16 <chr>,
+    #   cs_p17 <chr>, n_hij <chr>, e_con <chr>, cs_p20a_1 <chr>, cs_p20a_c <chr>, …
+
+Cabe mencionar que el formato CSV devuelve un tibble donde todas las
+columnas son de tipo caracter. Se realizo de este modo para evitar
+errores al momento de detectar los distintos tipos de columna.
+
+## Ejemplo 2
+
+Se requiere obtener la tabla sociodemográfica de la ENOE correspondiente
+al año 2008 del cuarto trimestre en formato DBF.
+
+``` r
+sdem <- descargar_modulo_n(2008, 4, "sdem", "dbf")
 
 nrow(sdem)
 ```
 
-    [1] 423744
+    [1] 407232
 
 ``` r
 ncol(sdem)
 ```
 
-    [1] 114
+    [1] 104
 
-Limitantes
+## Ejemplo 3
 
-1.  El tiempo de ejecución es relativamente elevado
-
-``` r
-system.time(descargar_enoe(url))
+```` markdown
+```{r}
+descargar_enoe_n(2020, 2, "csv")
 ```
+````
 
-       user  system elapsed 
-      39.66    6.52   57.65 
-
-2.  Necesita especificarse el enlace
-
-3.  Devuelve una lista y no distintos tibbles
-
-Por su parte, se desea el módulo SDEM del mismo periodo (ENOE 2T-2025).
-Aquello se realiza con la función `descargar_microdatos_enoe`
-
-``` r
-# cuestionario <- "sdem"
-
-sdem2 <- descargar_microdatos_enoe(url, cuestionario = "sdem")
-
-nrow(sdem2)
-```
-
-    [1] 423744
-
-``` r
-ncol(sdem2)
-```
-
-    [1] 114
-
-Limitantes
-
-1.  Tiempo de ejecución relativamente elevado
-
-``` r
-system.time(descargar_microdatos_enoe(url, cuestionario = "sdem"))
-```
-
-       user  system elapsed 
-      13.37    1.78   28.42 
-
-2.  Solo considera archivos CSV, no DBF u otros.
-
-La limitación general de ambas funciones es que han sido probadas con
-los enlaces de los microdatos de la ENOE de los años 2025 y 2026. Se
-desconoce si se ejecuta correctamente en periodos previos.
-
-Futuras ampliaciones
-
-- Considerar formatos adicionales como DBF
-- Probar la ejecución de ambas funciones en periodos previos a 2025
+    Error en descargar_enoe_n(2020, 2, "csv"): 
+      No existe enlace para dicho periodo. Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio: <https://www.inegi.org.mx/investigacion/etoe/default.html#Microdatos>. Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son una aproximación a los indicadores de la ENOE. La comparación es útil como medida de referencia.
 
 # Referencias
 
@@ -320,8 +385,6 @@ ESPACIO REVISTA INTERNACIONAL DE ESTADÍSTICA Y GEOGRAFÍA (Vol. 11, Núm.
 3, septiembre-diciembre, 2020).
 <https://www.inegi.org.mx/contenidos/productos/prod_serv/contenidos/espanol/bvinegi/productos/nueva_estruc/revista_rde/889463856702.pdf>
 
-Wickham, H., Averick, M., Bryan, J., Chang, W., McGowan, L., François,
-R., Grolemund, G., Hayes, A., Henry, L., Hester, J., Kuhn, M., Pedersen,
-T., Miller, E., Bache, S., Müller, K., Ooms, J., Robinson, D., Seidel,
-D., Spinu, V., … Yutani, H. (2019). Welcome to the Tidyverse. Journal of
-Open Source Software, 4(43), 1686. <https://doi.org/10.21105/joss.01686>
+Wickham, H.; Cetinkaya-Rundel, M.; y Grolemund, G. (2023). R para la
+Ciencia de Datos (2a ed.) \[versión en español, trad. Díaz Rodríguez,
+D.\]. <https://davidrsch.github.io/r4ds-es/>
