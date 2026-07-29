@@ -1,0 +1,1581 @@
+---
+date: "28-07-2026"
+format: gfm
+---
+
+```{r}
+#| label: setup
+#| warning: false
+#| message: false
+
+library(tidyverse)
+library(pacman)
+library(here)
+library(foreign)
+library(haven)
+
+source(here::here("scripts", "0_funciones.R"))
+```
+
+
+Se continua revisando la función `importinegi::enoe`
+
+La versión actual de la función es la siguiente
+
+```{{r}}
+enoe = function(year = NA, trimestre = NA, integrar = FALSE){
+  if (is.na(year) & is.na(trimestre)) {shell.exec("https://www.inegi.org.mx/programas/enoe/15ymas/")}
+  # Temp files
+  temp.enoe = tempfile()
+  zipdir     = tempdir()
+  formato = "dbf"
+
+  # Descargar
+  if (year >= 2020 & !(year == 2020 & trimestre == 'trim1')) {
+    url.base = paste("https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_n",year,trimestre,paste0(formato,".zip"), sep = "_")
+  } else {
+    url.base = paste0("http://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/", year, trimestre,  "_", formato, ".zip")
+  }
+  utils::download.file(url.base, temp.enoe)
+  utils::unzip(temp.enoe, exdir = zipdir)
+  list_dataraw = list.files(zipdir, pattern = paste0(formato,'$'), full.names = T)
+  list_names = basename(tools::file_path_sans_ext(list_dataraw))
+  # Read all files in the folder
+  output = lapply(list_dataraw, rio::import)
+  names(output) = list_names
+
+  # INTEGRAR - TRUE  FALSE
+  if (integrar == TRUE) {
+    output = Reduce(function(x, y) merge(x,y, all= TRUE), output)
+  }
+
+  # Return Object
+  return(output)
+}
+# Fin de la funcion
+```
+
+En `bitacora/1_validando_importinegi_enoe.qmd` se encontró que el error está relacionado al enlace generado. Por tanto, se intentará modificar dicha cuestión con `case_when`.
+
+Primero, solamente trabajemos con dicha cuestión
+
+```{r}
+enoe <-  function(year = NA, trimestre = NA, integrar = FALSE)
+{
+  # if (is.na(year) & is.na(trimestre)) {shell.exec("https://www.inegi.org.mx/programas/enoe/15ymas/")}
+  # Temp files
+  temp.enoe = tempfile()
+  zipdir     = tempdir()
+  formato = "dbf"
+
+  # Descargar
+  if (year >= 2020 & !(year == 2020 & trimestre == 'trim1')) {
+    url.base = paste("https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_n",year,trimestre,paste0(formato,".zip"), sep = "_")
+  } else {
+    url.base = paste0("http://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/", year, trimestre,  "_", formato, ".zip")
+  }
+  
+  return(url.base)
+}
+```
+
+Validamos
+
+```{r}
+enoe(2026, "trim1")
+```
+
+Sabemos que el enlace oficial es:
+
+<https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_2026_trim1_csv.zip> 
+
+Es decir, se tiene que modificar dicha cuestion.
+
+El resto de enlaces oficiales es el siguiente:
+
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_2026_trim1_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_2025_trim4_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_2025_trim3_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_2025_trim2_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_2025_trim1_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_2024_trim4_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_2024_trim3_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos//enoe_2024_trim2_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_2024_trim1_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_2023_trim4_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_2023_trim3_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_2023_trim2_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_2023_trim1_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_n_2022_trim4_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_n_2022_trim3_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_n_2022_trim2_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_n_2022_trim1_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_n_2021_trim4_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_n_2021_trim1_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_n_2020_trim4_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_n_2020_trim3_csv.zip
+2020-2T NA
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/2020trim1_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/2019trim4_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/2019trim1_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/2018trim4_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/2018trim1_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/2017trim1_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/2016trim1_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/2015trim1_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/2014trim1_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/2013trim1_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/2012trim1_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/2011trim1_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/2010trim1_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/2009trim1_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/2008trim1_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/2007trim1_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/2006trim1_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/2005trim1_csv.zip
+
+Hay una discrepancia en el año 2020
+
+Mi propuesta sería convertirlo en tibble para obtener el enlace según distintos valores
+
+```{r}
+year <- 2026
+trimestre <- 1
+
+url <- tibble(
+  year = year,
+  trimestre = trimestre
+)
+
+url
+```
+
+De ahí se aplicaría el operador condicional 
+
+```{r}
+url |> 
+  mutate(
+    url = case_when(
+      year >= 2023 ~ 
+        str_c(
+          "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_",
+          year,
+          "_trim",
+          trimestre,
+          "_csv.zip"
+        ),
+      TRUE ~ NA
+    )
+  )
+```
+
+Se convierte a función
+
+```{r}
+enoe <- function(year, trimestre)
+{
+  # year <- 2026
+  # trimestre <- 1
+
+  url <- tibble(
+    year = year,
+    trimestre = trimestre
+  )
+  
+  url |> 
+  mutate(
+    url = case_when(
+      year >= 2023 ~ 
+        str_c(
+          "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_",
+          year,
+          "_trim",
+          trimestre,
+          "_csv.zip"
+        ),
+      TRUE ~ NA
+    )
+  )
+  
+}
+```
+
+Se valida
+
+```{r}
+enoe(2025, 4)
+```
+
+Está correcto! Se convierte a vector
+
+```{r}
+enoe <- function(year, trimestre)
+{
+  # year <- 2026
+  # trimestre <- 1
+
+  datos <- tibble(
+    year = year,
+    trimestre = trimestre
+  )
+  
+  datos |> 
+    mutate(
+      url = case_when(
+        year >= 2023 ~ 
+          str_c(
+            "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_",
+            year,
+            "_trim",
+            trimestre,
+            "_csv.zip"
+          ),
+        TRUE ~ NA
+      )
+    )
+    # select(url)
+  
+  datos <- as.vector(datos)
+  
+  return(datos)
+}
+```
+
+Se valida
+
+```{r}
+enoe(2026, 1)
+```
+
+Se valida
+
+```{r}
+year <- 2026
+trimestre <- 1
+
+datos <- tibble(
+  year = year,
+  trimestre = trimestre
+)
+
+datos <- datos |> 
+  mutate(
+    url = case_when(
+      year >= 2023 ~ 
+        str_c(
+          "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_",
+          year,
+          "_trim",
+          trimestre,
+          "_csv.zip"
+        ),
+      TRUE ~ NA
+    )
+  ) |> 
+  select(url)
+
+datos2 <- as.vector(datos)
+
+datos2
+```
+
+Se valida si se puede descargar así
+
+```{{r}}
+archivo_temp <- tempfile(fileext = ".zip")
+
+download.file(
+  url = datos2,
+  destfile = archivo_temp
+)
+```
+
+Arroja error
+
+```
+4.
+.rs.downloadFile(url = datos2, destfile = archivo_temp)
+3.
+eval(call, envir = parent.frame())
+2.
+eval(call, envir = parent.frame())
+1.
+download.file(url = datos2, destfile = archivo_temp)
+
+```
+
+Puede evitarse si
+
+```{r}
+year <- 2026
+trimestre <- 1
+
+datos <- tibble(
+  year = year,
+  trimestre = trimestre
+)
+
+datos <- datos |> 
+  mutate(
+    url = case_when(
+      year >= 2023 ~ 
+        str_c(
+          "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_",
+          year,
+          "_trim",
+          trimestre,
+          "_csv.zip"
+        ),
+      TRUE ~ NA
+    )
+  ) |> 
+  select(url)
+
+datos2 <- as.vector(datos)
+
+datos2 <- datos2$url
+
+datos2
+```
+
+Se vuelve a intentar
+
+```{r}
+archivo_temp <- tempfile(fileext = ".zip")
+
+download.file(
+  url = datos2,
+  destfile = archivo_temp
+)
+```
+
+```{r}
+year <- 2026
+trimestre <- 1
+
+datos <- tibble(
+  year = year,
+  trimestre = trimestre
+)
+
+datos <- datos |> 
+  mutate(
+    url = case_when(
+      year >= 2023 ~ 
+        str_c(
+          "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_",
+          year,
+          "_trim",
+          trimestre,
+          "_csv.zip"
+        ),
+      TRUE ~ NA
+    )
+  ) |> 
+  select(url)
+
+datos2 <- as.vector(datos)$url
+
+datos2
+```
+
+Se valida `switch`
+
+```{{r}}
+x <- 1
+
+switch (x,
+  1 = 5
+)
+```
+
+```
+Error: inesperado '=' in:
+"switch (x,
+  1 ="
+```
+
+Arroja error. Según la IA no es una función símil de `case_when` ya que no está vectorizada. Aunque puede hacerse de ese modo, se hace más engorroso. Por tanto, se desiste de su uso.
+
+Regresemos a nuestro ejemplo anterior, pero usando `if` y `else if`
+
+```{r}
+year <- 2026
+trimestre <- 1
+
+if (year >= 2023) {
+  paste(
+    "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_",
+    year, "_trim", trimestre, "_csv.zip",
+    sep = ""
+  )
+}
+
+```
+
+Aumentemos la complejidad
+
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_n_2022_trim4_csv.zip
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_n_2020_trim3_csv.zip
+
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/2020trim1_csv.zip
+
+```{r}
+year <- 2021
+trimestre <- 1
+url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/"
+
+if (year >= 2023) {
+  paste(url, "enoe_", year, "_trim", trimestre, "_csv.zip", sep = "")
+} else if ((year >= 2020 & trimestre >=3 ) & year <= 2022) {
+  paste(url, "enoe_n_", year, "_trim", trimestre, "_csv.zip", sep = "")
+} else {
+  paste(url, year, "trim", trimestre, "_csv.zip", sep = "")
+}
+```
+
+El problema es la segunda condición, se añade otra ahí mismo
+
+```{r}
+year <- 2023
+trimestre <- 1
+url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/"
+
+if (year >= 2023) {
+  paste(url, "enoe_", year, "_trim", trimestre, "_csv.zip", sep = "")
+} else if ((year == 2020 & trimestre >=3 ) | (year >= 2021 & year <= 2022)) {
+  paste(url, "enoe_n_", year, "_trim", trimestre, "_csv.zip", sep = "")
+} else {
+  paste(url, year, "trim", trimestre, "_csv.zip", sep = "")
+}
+```
+
+Listo! 
+
+Faltan dos enlaces
+
+https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos//enoe_2024_trim2_csv.zip
+2020-2T NA
+
+En el caso de 2020-2T, el INEGI menciona que:
+
+"Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio. La información a partir de julio se publicará conforme al calendario de difusión trimestral de la ENOE."
+
+El cual dirige a la siguiente liga
+
+<https://www.inegi.org.mx/investigacion/etoe/default.html#Microdatos>
+
+En presentación de resultados > junio 
+
+<https://www.inegi.org.mx/contenidos/investigacion/etoe/doc/etoe_presentacion_resultados_junio_2020.pdf>
+
+Menciona que:
+
+"Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son
+una aproximación a los indicadores de la ENOE. La comparación es útil como
+medida de referencia." p. 9
+
+Puedo añadirlos ahí mismo o aparte, para separar dichas cuestiones. Se decide hacerlo aparte.
+
+Primero se definen variables
+
+```{r}
+year <- 2024
+trimestre <- 2
+url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/"
+
+if (year >= 2023) {
+  url <- paste(url, "enoe_", year, "_trim", trimestre, "_csv.zip", sep = "")
+} else if ((year == 2020 & trimestre >=3 ) | (year >= 2021 & year <= 2022)) {
+  url <- paste(url, "enoe_n_", year, "_trim", trimestre, "_csv.zip", sep = "")
+} else {
+  url <- paste(url, year, "trim", trimestre, "_csv.zip", sep = "")
+}
+
+url
+```
+
+Luego se añade dichas cuestiones
+
+```{r}
+if (year == 2024 & trimestre == 2) {
+  sub(
+    x = url,
+    pattern = "/enoe_2024",
+    replacement = "//enoe_2024"
+  )
+} else if (year == 2020 & trimestre == 2) {
+  stop("Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio. La información a partir de julio se publicará conforme al calendario de difusión trimestral de la ENOE.")
+}
+```
+
+Se valida
+
+```{r}
+year <- 2020
+trimestre <- 1
+url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/"
+
+if (year >= 2023) {
+  url <- paste(url, "enoe_", year, "_trim", trimestre, "_csv.zip", sep = "")
+} else if ((year == 2020 & trimestre >=3 ) | (year >= 2021 & year <= 2022)) {
+  url <- paste(url, "enoe_n_", year, "_trim", trimestre, "_csv.zip", sep = "")
+} else {
+  url <- paste(url, year, "trim", trimestre, "_csv.zip", sep = "")
+}
+
+if (year == 2024 & trimestre == 2) {
+  url <- sub(
+    x = url,
+    pattern = "/enoe_2024",
+    replacement = "//enoe_2024"
+  )
+} else if (year == 2020 & trimestre == 2) {
+  stop("Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio. Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son una aproximación a los indicadores de la ENOE. La comparación es útil como medida de referencia.")
+}
+
+url
+```
+
+Listo!
+
+```{r}
+year <- 2020
+trimestre <- 2
+url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/"
+
+if (year >= 2023) {
+  url <- paste(url, "enoe_", year, "_trim", trimestre, "_csv.zip", sep = "")
+} else if ((year == 2020 & trimestre >=3 ) | (year >= 2021 & year <= 2022)) {
+  url <- paste(url, "enoe_n_", year, "_trim", trimestre, "_csv.zip", sep = "")
+} else {
+  url <- paste(url, year, "trim", trimestre, "_csv.zip", sep = "")
+}
+
+if (year == 2024 & trimestre == 2) {
+  url <- sub(
+    x = url,
+    pattern = "/enoe_2024",
+    replacement = "//enoe_2024"
+  )
+} else if (year == 2020 & trimestre == 2) {
+  stop("No existe enlace para dicho periodo. Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio. Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son una aproximación a los indicadores de la ENOE. La comparación es útil como medida de referencia.")
+}
+
+url
+```
+
+Incluso se puede especificar el formato
+
+```{r}
+year <- 2020
+trimestre <- 2
+formato <- "dbf"
+url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/"
+
+if (year >= 2023) {
+  url <- paste(url, "enoe_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+} else if ((year == 2020 & trimestre >=3 ) | (year >= 2021 & year <= 2022)) {
+  url <- paste(url, "enoe_n_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+} else {
+  url <- paste(url, year, "trim", trimestre, "_", formato, ".zip", sep = "")
+}
+
+if (year == 2024 & trimestre == 2) {
+  url <- sub(
+    x = url,
+    pattern = "/enoe_2024",
+    replacement = "//enoe_2024"
+  )
+} else if (year == 2020 & trimestre == 2) {
+  stop("No existe enlace para dicho periodo. Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio: <https://www.inegi.org.mx/investigacion/etoe/default.html#Microdatos>. Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son una aproximación a los indicadores de la ENOE. La comparación es útil como medida de referencia.")
+}
+
+url
+```
+
+Lo que sigue es descargar el archivo
+
+```{r}
+year <- 2026
+trimestre <- 1
+formato <- "csv"
+url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/"
+
+if (year >= 2023) {
+  url <- paste(url, "enoe_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+} else if ((year == 2020 & trimestre >=3 ) | (year >= 2021 & year <= 2022)) {
+  url <- paste(url, "enoe_n_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+} else {
+  url <- paste(url, year, "trim", trimestre, "_", formato, ".zip", sep = "")
+}
+
+if (year == 2024 & trimestre == 2) {
+  url <- sub(
+    x = url,
+    pattern = "/enoe_2024",
+    replacement = "//enoe_2024"
+  )
+} else if (year == 2020 & trimestre == 2) {
+  stop("No existe enlace para dicho periodo. Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio: <https://www.inegi.org.mx/investigacion/etoe/default.html#Microdatos>. Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son una aproximación a los indicadores de la ENOE. La comparación es útil como medida de referencia.")
+}
+
+url
+```
+
+```{r}
+archivo_temp <- tempfile(fileext = ".zip")
+
+options(timeout = max(900, getOption("timeout")))
+
+download.file(
+  url = url,
+  destfile = archivo_temp
+)
+```
+
+Después se extrae dicho archivo
+
+```{r}
+unzip(
+  zipfile = archivo_temp,
+  list = TRUE
+)
+```
+
+```{r}
+unzip(
+  zipfile = archivo_temp,
+  exdir = tempdir()
+)
+```
+
+Se valida
+
+```{r}
+list.files(path = tempdir())
+```
+
+Ahora se crea el objeto que contendrá la ruta de los archivos extraídos
+
+```{r}
+archivo_temp <- list.files(
+  path = tempdir(),
+  pattern = "\\.csv$",
+  full.names = TRUE
+)
+
+archivo_temp
+```
+
+Posteriormente se crea el objeto que contendrá los nombres
+
+```{r}
+basename(archivo_temp)
+```
+
+En lo personal prefiero quitarle el prefijo `ENOE` y la extensión
+
+```{r}
+nombres <- basename(archivo_temp)
+
+nombres <- sub(
+  x = nombres,
+  pattern = "ENOE_",
+  replacement = ""
+)
+
+nombres <- sub(
+  x = nombres,
+  pattern = ".csv",
+  replacement = ""
+)
+
+nombres
+```
+
+Ahora se crea la lista como se observa en R for data science (2a ed.), sección 26.3.4
+
+```{r}
+enoe <- archivo_temp |> 
+  purrr::set_names(nm = nombres) |> 
+  purrr::map(
+    \(archivo_temp)
+    readr::read_csv(
+      file = archivo_temp,
+      col_types = cols(.default = col_character())
+    )
+  )
+
+names(enoe)
+```
+
+Así pues, el código completo sería el siguiente
+
+```{r}
+year <- 2026
+trimestre <- 1
+formato <- "csv"
+url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/"
+
+if (year >= 2023) {
+  url <- paste(url, "enoe_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+} else if ((year == 2020 & trimestre >=3 ) | (year >= 2021 & year <= 2022)) {
+  url <- paste(url, "enoe_n_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+} else {
+  url <- paste(url, year, "trim", trimestre, "_", formato, ".zip", sep = "")
+}
+
+if (year == 2024 & trimestre == 2) {
+  url <- sub(
+    x = url,
+    pattern = "/enoe_2024",
+    replacement = "//enoe_2024"
+  )
+} else if (year == 2020 & trimestre == 2) {
+  stop("No existe enlace para dicho periodo. Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio: <https://www.inegi.org.mx/investigacion/etoe/default.html#Microdatos>. Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son una aproximación a los indicadores de la ENOE. La comparación es útil como medida de referencia.")
+}
+
+archivo_temp <- tempfile(fileext = ".zip")
+
+options(timeout = max(900, getOption("timeout")))
+
+download.file(
+  url = url,
+  destfile = archivo_temp
+)
+
+unzip(
+  zipfile = archivo_temp,
+  exdir = tempdir()
+)
+
+archivo_temp <- list.files(
+  path = tempdir(),
+  pattern = "\\.csv$",
+  full.names = TRUE
+)
+
+nombres <- basename(archivo_temp)
+
+nombres <- sub(
+  x = nombres,
+  pattern = "ENOE_",
+  replacement = ""
+)
+
+nombres <- sub(
+  x = nombres,
+  pattern = ".csv",
+  replacement = ""
+)
+
+enoe <- archivo_temp |> 
+  purrr::set_names(nm = nombres) |> 
+  purrr::map(
+    \(archivo_temp)
+    readr::read_csv(
+      file = archivo_temp,
+      col_types = cols(.default = col_character())
+    )
+  )
+```
+
+Se valida
+
+```{r}
+names(enoe)
+```
+
+Listo!
+
+En función sería así
+
+```{r}
+descargar_enoe_n <- function(year, trimestre, formato)
+{
+  url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/"
+  
+  # obtener enlaces según el periodo
+  if (year >= 2023) {
+    url <- paste(url, "enoe_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else if ((year == 2020 & trimestre >=3 ) | (year >= 2021 & year <= 2022)) {
+    url <- paste(url, "enoe_n_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else {
+    url <- paste(url, year, "trim", trimestre, "_", formato, ".zip", sep = "")
+  }
+  
+  # enlaces con casos especiales
+  # doble barra
+  if (year == 2024 & trimestre == 2) {
+    url <- sub(
+      x = url,
+      pattern = "/enoe_2024",
+      replacement = "//enoe_2024"
+    )
+  } else if (year == 2020 & trimestre == 2) {
+    # no existe enlace
+    stop("No existe enlace para dicho periodo. Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio: <https://www.inegi.org.mx/investigacion/etoe/default.html#Microdatos>. Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son una aproximación a los indicadores de la ENOE. La comparación es útil como medida de referencia.")
+  }
+  
+  # proceso de descarga
+  archivo_temp <- tempfile(fileext = ".zip")
+  
+  # se aumenta tiempo máximo de descarga para evitar error
+  options(timeout = max(900, getOption("timeout")))
+  
+  download.file(
+    url = url,
+    destfile = archivo_temp
+  )
+  
+  # extracción
+  unzip(
+    zipfile = archivo_temp,
+    exdir = tempdir()
+  )
+  
+  # ruta para cargar archivos
+  archivo_temp <- list.files(
+    path = tempdir(),
+    pattern = "\\.csv$",
+    full.names = TRUE
+  )
+  
+  # nombre para la lista
+  nombres <- basename(archivo_temp)
+  
+  nombres <- sub(
+    x = nombres,
+    pattern = "ENOE_",
+    replacement = ""
+  )
+  
+  nombres <- sub(
+    x = nombres,
+    pattern = ".csv",
+    replacement = ""
+  )
+  
+  # fuente R for Data Science (2nd ed.), sección 26.3.4
+  enoe <- archivo_temp |> 
+    purrr::set_names(nm = nombres) |> 
+    purrr::map(
+      \(archivo_temp)
+      readr::read_csv(
+        file = archivo_temp,
+        col_types = cols(.default = col_character())
+      )
+    )
+  
+  return(enoe)
+}
+```
+
+Se valida
+
+```{r}
+enoe <- descargar_enoe_n(2025, 2, "csv")
+
+names(enoe)
+```
+
+Listo!!!
+
+```{r}
+ncol(enoe$COE1T225)
+ncol(enoe$COE2T225)
+```
+
+NO se puede unir
+
+Por otro lado, existen cuatro formatos:
+
+* CSV
+* DBF: archivos bases de datos contenidos en forma de tablas
+* DTA: archivos de datos generados en Stata
+* SAV: archivos de datos generados en SPSS
+
+Pérez (2015) menciona que para importar archivos como los mencionados líneas arriba se requiere el paquete `foreign`
+
+```{r}
+system.file(package = "foreign")
+find.package(package = "foreign")
+```
+
+```{r}
+p_version_diff("foreign")
+```
+
+Se valida documentación
+
+Las funciones son
+
+* DBF -> `read.dbf`
+* DTA -> `read.dta`
+* SAV -> `read.spss`
+
+No permite especificar el tipo de formato a cada columna, o lo hace de forma muy general por tipo. Se valida con IA.
+
+Para el caso de DTA y SAV:
+
+* La IA sugieren los paquetes `haven`, también se observa en una nota personal en Pérez (2015, 122), y `rio`
+
+En el caso de DBF
+
+* `readxl`/`dbf`
+* `sf`
+* `rio`
+
+Al validar la documentación `?read_excel`, solamente lee archivos tipo Excel.
+
+Con respecto al paquete `haven`, actualmente el mantenimiento lo lleva a cabo Hadley Wickham así que no hay tantos inconvenientes. 
+
+```{r}
+library(haven)
+```
+
+Este paquete puede importar y exportar archivos STATA, SAS, SPSS
+
+```{r}
+find.package(package = "sf")
+system.file(package = "dbf")
+find.package(package = "rio")
+```
+
+No está instalado el paquete `dbf` se instala
+
+```{r}
+install.packages("dbf")
+```
+
+Al parecer no está disponible para la versión actual de R. Se valida `sf` y `rio`
+
+```{r}
+library(sf)
+library(rio)
+```
+
+El paquete `sf` es para datos espaciales. Mientras que `rio` facilta la importación y exportación de datos con funciones fáciles como `export` e `import`. 
+
+Para evitar inconvenientes, nos quedamos con `foreign::read.dbf`, con sus limitaciones y `haven` para el resto de formatos.
+
+```{r}
+library(rlang)
+```
+
+```{r}
+text <- "if (5 > 2) {print(\"Sí\")}"
+
+expresion <- parse_expr(text)
+
+expresion
+```
+
+Ahora se añaden dichas cuestiones a la función
+
+```{r}
+descargar_enoe_n <- function(year, trimestre, formato)
+{
+  url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/"
+  
+  # obtener enlaces según el periodo
+  if (year >= 2023) {
+    url <- paste(url, "enoe_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else if ((year == 2020 & trimestre >= 3 ) | (year >= 2021 & year <= 2022)) {
+    url <- paste(url, "enoe_n_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else {
+    url <- paste(url, year, "trim", trimestre, "_", formato, ".zip", sep = "")
+  }
+  
+  # enlaces con casos especiales
+  # doble barra
+  if (year == 2024 & trimestre == 2) {
+    url <- sub(
+      x = url,
+      pattern = "/enoe_2024",
+      replacement = "//enoe_2024"
+    )
+  } else if (year == 2020 & trimestre == 2) {
+    # no existe enlace
+    stop("No existe enlace para dicho periodo. Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio: <https://www.inegi.org.mx/investigacion/etoe/default.html#Microdatos>. Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son una aproximación a los indicadores de la ENOE. La comparación es útil como medida de referencia.")
+  }
+  
+  # proceso de descarga
+  archivo_temp <- tempfile(fileext = ".zip")
+  
+  # se aumenta tiempo máximo de descarga para evitar error
+  options(timeout = max(900, getOption("timeout")))
+  
+  download.file(
+    url = url,
+    destfile = archivo_temp
+  )
+  
+  # extracción
+  unzip(
+    zipfile = archivo_temp,
+    exdir = tempdir()
+  )
+  
+  # ruta para cargar archivos
+  archivo_temp <- list.files(
+    path = tempdir(),
+    pattern = "\\.csv$",
+    full.names = TRUE
+  )
+  
+  # nombre para la lista
+  nombres <- basename(archivo_temp)
+  
+  nombres <- sub(
+    x = nombres,
+    pattern = "ENOE_",
+    replacement = ""
+  )
+  
+  nombres <- sub(
+    x = nombres,
+    pattern = ".csv",
+    replacement = ""
+  )
+  
+  # fuente R for Data Science (2nd ed.), sección 26.3.4
+  if (formato == "csv") {
+    enoe <- archivo_temp |> 
+      purrr::set_names(nm = nombres) |> 
+      purrr::map(
+        \(archivo_temp)
+        readr::read_csv(
+          file = archivo_temp,
+          col_types = cols(.default = col_character())
+        )
+      )
+  } else if (formato == "dbf") {
+    enoe <- archivo_temp |> 
+      purrr::set_names(nm = nombres) |> 
+      purrr::map(foreign::read.dbf)
+  } else if (formato == "dta") {
+    enoe <- archivo_temp |> 
+      purrr::set_names(nm = nombres) |> 
+      purrr::map(haven::read_dta)
+  } else if (formato == "sav") {
+    enoe <- archivo_temp |> 
+      purrr::set_names(nm = nombres) |> 
+      purrr::map(haven::read_sav)
+  }
+  
+  return(enoe)
+}
+```
+
+Al validar con la IA si se puede enmascarar la expresión dentro de `map` con `parse_expr`, menciona que no es posible porque aquello realiza una evaluación ordenada y lo que se búsqueda es ejecutar funciones, aquello se puede hacer (de forma rebuscada) con `rlang::as_function`.
+
+Al mismo tiempo, menciona que una función puede existir en un objeto directamente como tal y el tipo que tendrá dicho objeto será tipo función. Por ejemplo,
+
+```{r}
+sumar <- sum
+
+class(sumar)
+
+sumar(1:10)
+```
+
+Entonces, se evita enmascarar dicho objeto y se define como tal como tipo función. Así
+
+```{r}
+ejemplo <- haven::read_dta
+
+class(ejemplo)
+```
+
+Por tanto, el código quedaría como sigue
+
+```{{r}}
+# fuente R for Data Science (2nd ed.), sección 26.3.4
+  if (formato == "csv") {
+    importar_archivo <- \(archivo_temp)
+        readr::read_csv(
+          file = archivo_temp,
+          col_types = cols(.default = col_character())
+        )
+  } else if (formato == "dbf") {
+    importar_archivo <- foreign::read.dbf
+  } else if (formato == "dta") {
+    importar_archivo <- haven::read_dta
+  } else if (formato == "sav") {
+    imporar_archivo <- haven::read_sav
+  }
+
+enoe <- archivo_temp |> 
+      purrr::set_names(nm = nombres) |> 
+      purrr::map(importar_archivo)
+```
+
+Sin embargo, la IA menciona que este código puede simplicarse si se hace tipo lista 
+
+```{{r}}
+# 1. Mapeo de formatos a funciones
+funciones <- list(
+  csv = \(x) readr::read_csv(file = x, col_types = readr::cols(.default = readr::col_character())),
+  dbf = foreign::read.dbf,
+  dta = haven::read_dta,
+  sav = haven::read_sav
+)
+
+# 2. Extraemos la función necesaria y la aplicamos
+funcion_importar <- funciones[[formato]]
+
+enoe <- archivo_temp |> 
+  purrr::set_names(nm = nombres) |> 
+  purrr::map(funcion_importar)
+
+```
+
+Aunque nos quedamos con el código `if else` ya que fue el que se me ocurrió a mí. Por tanto la función queda como sigue
+
+```{r}
+descargar_enoe_n <- function(year, trimestre, formato)
+{
+  url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/"
+  
+  # obtener enlaces según el periodo
+  if (year >= 2023) {
+    url <- paste(url, "enoe_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else if ((year == 2020 & trimestre >= 3 ) | (year >= 2021 & year <= 2022)) {
+    url <- paste(url, "enoe_n_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else {
+    url <- paste(url, year, "trim", trimestre, "_", formato, ".zip", sep = "")
+  }
+  
+  # enlaces con casos especiales
+  # doble barra
+  if (year == 2024 & trimestre == 2) {
+    url <- sub(
+      x = url,
+      pattern = "/enoe_2024",
+      replacement = "//enoe_2024"
+    )
+  } else if (year == 2020 & trimestre == 2) {
+    # no existe enlace
+    stop("No existe enlace para dicho periodo. Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio: <https://www.inegi.org.mx/investigacion/etoe/default.html#Microdatos>. Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son una aproximación a los indicadores de la ENOE. La comparación es útil como medida de referencia.")
+  }
+  
+  # proceso de descarga
+  archivo_temp <- tempfile(fileext = ".zip")
+  
+  # se aumenta tiempo máximo de descarga para evitar error
+  options(timeout = max(900, getOption("timeout")))
+  
+  download.file(
+    url = url,
+    destfile = archivo_temp
+  )
+  
+  # extracción
+  unzip(
+    zipfile = archivo_temp,
+    exdir = tempdir()
+  )
+  
+  # ruta para cargar archivos
+  archivo_temp <- list.files(
+    path = tempdir(),
+    pattern = "\\.csv$",
+    full.names = TRUE
+  )
+  
+  # nombre para la lista
+  nombres <- basename(archivo_temp)
+  
+  nombres <- sub(
+    x = nombres,
+    pattern = "ENOE_",
+    replacement = ""
+  )
+  
+  nombres <- sub(
+    x = nombres,
+    pattern = ".csv",
+    replacement = ""
+  )
+  
+  # especificar formato para importación
+  if (formato == "csv") {
+    importar_archivo <- \(archivo_temp)
+        readr::read_csv(
+          file = archivo_temp,
+          col_types = cols(.default = col_character())
+        )
+  } else if (formato == "dbf") {
+    importar_archivo <- foreign::read.dbf
+  } else if (formato == "dta") {
+    importar_archivo <- haven::read_dta
+  } else if (formato == "sav") {
+    importar_archivo <- haven::read_sav
+  }
+  
+  # La IA sugiere validar formato con una lista
+  # importar_archivo <- list(
+  #   csv = \(x) readr::read_csv(file = x, col_types = readr::cols(.default = readr::col_character())),
+  #   dbf = foreign::read.dbf,
+  #   dta = haven::read_dta,
+  #   sav = haven::read_sav
+  # )
+  # 
+  # importar_archivo <- importar_archivo[[formato]]
+  
+  # importación a un solo objeto tipo lista
+  # fuente R for Data Science (2nd ed.), sección 26.3.4
+  enoe <- archivo_temp |> 
+    purrr::set_names(nm = nombres) |> 
+    purrr::map(importar_archivo)
+  
+  return(enoe)
+  
+}
+```
+
+Se valida
+
+```{r}
+enoe <- descargar_enoe_n(2025, 2, "csv")
+
+names(enoe)
+```
+
+Correcto!!!
+
+Se valida demás formatos
+
+```{{r}}
+enoe <- descargar_enoe_n(2025, 2, "dbf")
+
+names(enoe)
+```
+
+Falta eliminar archivos descargados
+
+```{r}
+archivo_temp <- list.files(
+  path = tempdir(),
+  pattern = "\\.zip$|\\.csv$|\\.dbf$|\\.dta$|\\.sav$",
+  full.names = TRUE
+)
+
+unlink(archivo_temp)
+
+list.files(tempdir())
+```
+
+Se añade a la función
+
+```{r}
+descargar_enoe_n <- function(year, trimestre, formato)
+{
+  url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/"
+  
+  # obtener enlaces según el periodo
+  if (year >= 2023) {
+    url <- paste(url, "enoe_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else if ((year == 2020 & trimestre >= 3 ) | (year >= 2021 & year <= 2022)) {
+    url <- paste(url, "enoe_n_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else {
+    url <- paste(url, year, "trim", trimestre, "_", formato, ".zip", sep = "")
+  }
+  
+  # enlaces con casos especiales
+  # doble barra
+  if (year == 2024 & trimestre == 2) {
+    url <- sub(
+      x = url,
+      pattern = "/enoe_2024",
+      replacement = "//enoe_2024"
+    )
+  } else if (year == 2020 & trimestre == 2) {
+    # no existe enlace
+    stop("No existe enlace para dicho periodo. Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio: <https://www.inegi.org.mx/investigacion/etoe/default.html#Microdatos>. Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son una aproximación a los indicadores de la ENOE. La comparación es útil como medida de referencia.")
+  }
+  
+  # proceso de descarga
+  archivo_temp <- tempfile(fileext = ".zip")
+  
+  # se aumenta tiempo máximo de descarga para evitar error
+  options(timeout = max(900, getOption("timeout")))
+  
+  download.file(
+    url = url,
+    destfile = archivo_temp
+  )
+  
+  # extracción
+  unzip(
+    zipfile = archivo_temp,
+    exdir = tempdir()
+  )
+  
+  # ruta para cargar archivos
+  archivo_temp <- list.files(
+    path = tempdir(),
+    pattern = "\\.csv$|\\.dbf$|\\.dta$|\\.sav$",
+    full.names = TRUE
+  )
+  
+  # nombre para la lista
+  nombres <- basename(archivo_temp)
+  
+  nombres <- sub(
+    x = nombres,
+    pattern = "ENOE_",
+    replacement = ""
+  )
+  
+  nombres <- sub(
+    x = nombres,
+    pattern = ".csv",
+    replacement = ""
+  )
+  
+  # especificar formato para importación
+  if (formato == "csv") {
+    importar_archivo <- \(archivo_temp)
+        readr::read_csv(
+          file = archivo_temp,
+          col_types = cols(.default = col_character())
+        )
+  } else if (formato == "dbf") {
+    importar_archivo <- foreign::read.dbf
+  } else if (formato == "dta") {
+    importar_archivo <- haven::read_dta
+  } else if (formato == "sav") {
+    importar_archivo <- haven::read_sav
+  }
+  
+  # La IA sugiere validar formato con una lista
+  # importar_archivo <- list(
+  #   csv = \(x) readr::read_csv(file = x, col_types = readr::cols(.default = readr::col_character())),
+  #   dbf = foreign::read.dbf,
+  #   dta = haven::read_dta,
+  #   sav = haven::read_sav
+  # )
+  # 
+  # importar_archivo <- importar_archivo[[formato]]
+  
+  # importación a un solo objeto tipo lista
+  # fuente R for Data Science (2nd ed.), sección 26.3.4
+  enoe <- archivo_temp |> 
+    purrr::set_names(nm = nombres) |> 
+    purrr::map(importar_archivo)
+  
+  # eliminación de archivos descargados y extraídos
+  archivo_temp <- list.files(
+    path = tempdir(),
+    pattern = "\\.zip$|\\.csv$|\\.dbf$|\\.dta$|\\.sav$",
+    full.names = TRUE
+  )
+
+  unlink(archivo_temp)
+  
+  return(enoe)
+}
+```
+
+
+Se vuelve a validar
+
+```{r}
+enoe <- descargar_enoe_n(2025, 2, "csv")
+
+names(enoe)
+```
+
+Listo! Se valida demás formatos
+
+```{r}
+enoe <- descargar_enoe_n(2025, 2, "dbf")
+
+names(enoe)
+```
+
+Correcto! Se valida tipo de objeto
+
+```{r}
+enoe$SDEMT225.dbf
+```
+
+Se observa que aparece la extensión o formato, se modifica función
+
+```{r}
+descargar_enoe_n <- function(year, trimestre, formato)
+{
+  url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/"
+  
+  # obtener enlaces según el periodo
+  if (year >= 2023) {
+    url <- paste(url, "enoe_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else if ((year == 2020 & trimestre >= 3 ) | (year >= 2021 & year <= 2022)) {
+    url <- paste(url, "enoe_n_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else {
+    url <- paste(url, year, "trim", trimestre, "_", formato, ".zip", sep = "")
+  }
+  
+  # enlaces con casos especiales
+  # doble barra
+  if (year == 2024 & trimestre == 2) {
+    url <- sub(
+      x = url,
+      pattern = "/enoe_2024",
+      replacement = "//enoe_2024"
+    )
+  } else if (year == 2020 & trimestre == 2) {
+    # no existe enlace
+    stop("No existe enlace para dicho periodo. Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio: <https://www.inegi.org.mx/investigacion/etoe/default.html#Microdatos>. Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son una aproximación a los indicadores de la ENOE. La comparación es útil como medida de referencia.")
+  }
+  
+  # proceso de descarga
+  archivo_temp <- tempfile(fileext = ".zip")
+  
+  # se aumenta tiempo máximo de descarga para evitar error
+  options(timeout = max(900, getOption("timeout")))
+  
+  download.file(
+    url = url,
+    destfile = archivo_temp
+  )
+  
+  # extracción
+  unzip(
+    zipfile = archivo_temp,
+    exdir = tempdir()
+  )
+  
+  # ruta para cargar archivos
+  archivo_temp <- list.files(
+    path = tempdir(),
+    pattern = "\\.csv$|\\.dbf$|\\.dta$|\\.sav$",
+    full.names = TRUE
+  )
+  
+  # nombre para la lista
+  nombres <- basename(archivo_temp)
+  
+  nombres <- sub(
+    x = nombres,
+    pattern = "ENOE_",
+    replacement = ""
+  )
+  
+  nombres <- sub(
+    x = nombres,
+    pattern = "\\.csv|\\.dbf|\\.dta|\\.sav",
+    replacement = ""
+  )
+  
+  # especificar formato para importación
+  if (formato == "csv") {
+    importar_archivo <- \(archivo_temp)
+        readr::read_csv(
+          file = archivo_temp,
+          col_types = cols(.default = col_character())
+        )
+  } else if (formato == "dbf") {
+    importar_archivo <- foreign::read.dbf
+  } else if (formato == "dta") {
+    importar_archivo <- haven::read_dta
+  } else if (formato == "sav") {
+    importar_archivo <- haven::read_sav
+  }
+  
+  # La IA sugiere validar formato con una lista
+  # importar_archivo <- list(
+  #   csv = \(x) readr::read_csv(file = x, col_types = readr::cols(.default = readr::col_character())),
+  #   dbf = foreign::read.dbf,
+  #   dta = haven::read_dta,
+  #   sav = haven::read_sav
+  # )
+  # 
+  # importar_archivo <- importar_archivo[[formato]]
+  
+  # importación a un solo objeto tipo lista
+  # fuente R for Data Science (2nd ed.), sección 26.3.4
+  enoe <- archivo_temp |> 
+    purrr::set_names(nm = nombres) |> 
+    purrr::map(importar_archivo)
+  
+  # eliminación de archivos descargados y extraídos
+  archivo_temp <- list.files(
+    path = tempdir(),
+    pattern = "\\.zip$|\\.csv$|\\.dbf$|\\.dta$|\\.sav$",
+    full.names = TRUE
+  )
+
+  unlink(archivo_temp)
+  
+  return(enoe)
+}
+```
+
+Se vuelve a validar
+
+```{r}
+enoe <- descargar_enoe_n(2025, 2, "dbf")
+
+names(enoe)
+```
+
+Listo!
+
+Se valida otros formatos
+
+```{r}
+enoe <- descargar_enoe_n(2025, 2, "dta")
+
+names(enoe)
+```
+
+```{r}
+enoe$SDEMT225
+```
+
+El objeto resultante es tipo tibble
+
+```{r}
+enoe <- descargar_enoe_n(2025, 2, "sav")
+
+names(enoe)
+```
+
+```{r}
+enoe$SDEMT225
+```
+
+Listo!
+
+```{{r}}
+descargar_enoe_n(2020, 2, "csv")
+```
+
+Se valida un año muy "viejo"
+
+```{r}
+enoe <- descargar_enoe_n(2015, 4, "csv")
+
+names(enoe)
+```
+
+```{r}
+enoe$SDEMT415
+```
+
+Listo!
+
+```{{r}}
+descargar_enoe_n(2020, 2, "csv")
+```
+
+Se añade al script `funciones` y se vuelve a validar
+
+```{r}
+descargar_enoe_n(2026, 1, "dbf")
+```
+
