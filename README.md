@@ -4,8 +4,11 @@ Ramón Carrillo
 
 # Introducción
 
-Este repositorio pretende generar el código fuente que permita descargar
-los microdatos de la ENOE directamente del repositorio del INEGI.
+Este repositorio consiste en descargar los microdatos de la ENOE
+directamente del repositorio del INEGI, es decir, sin la necesidad de
+ingresar el enlace.
+
+## Requisitos
 
 ``` r
 if (require(pacman) == FALSE) {
@@ -25,17 +28,16 @@ Las funciones desarrolladas son las siguientes:
 
 ```` markdown
 ```{r}
-# library(tidyverse)
-descargar_enoe_n(year, trimestre, formato)
-descargar_modulo_n(year, trimestre, modulo, formato)
+descargar_enoe(year, trimestre, formato = "csv")
+descargar_modulo(year, trimestre, modulo = "sdem", formato = "csv")
 ```
 ````
 
-- `descargar_enoe_n(year, trimestre, formato)`: obtiene los microdatos
-  de TODOS los módulos, devuelve una lista donde cada elemento contiene
-  cada módulo de la ENOE,
+- `descargar_enoe(year, trimestre, formato)`: obtiene los microdatos de
+  TODOS los módulos (o tablas), devuelve una lista donde cada elemento
+  contiene cada módulo de la ENOE,
 
-- `descargar_modulo_n(year, trimestre, modulo, formato)`: obtiene los
+- `descargar_modulo(year, trimestre, modulo, formato)`: obtiene los
   microdatos de un módulo y devuelve ya sea un tibble (si se
   especificaron los formatos CSV, STA, SAV) o un data frame (en el caso
   de DBF).
@@ -44,13 +46,115 @@ descargar_modulo_n(year, trimestre, modulo, formato)
 
 - `year`: año de levantamiento de la encuesta (2005 a la actualidad),
 - `trimestre`: trimestre de levantamiento (1 a 4),
-- `formato`: formato del archivo a descargar (CSV, DBF, STA, SAV),
+- `formato`: formato del archivo a descargar (CSV, DBF, STA, SAV), por
+  defecto en formato CSV,
 - `modulo`: tabla a seleccionar (INEGI, 2023, pp. 1-2):
   - `hog`: hogar,
   - `viv`: vivienda,
-  - `sdem`: sociodemográfico
+  - `sdem`: sociodemográfico (por defecto),
   - `coe1`: cuestionario de ocupación y empleo I,
   - `coe2`: cuestionario de ocupación y empleo II,
+
+# Ejemplos
+
+## Ejemplo 1
+
+Se desea obtener los microdatos correspondientes al tercer trimestre de
+2024.
+
+``` r
+enoe <- descargar_enoe(2024, 3, "csv")
+
+class(enoe)
+```
+
+    [1] "list"
+
+``` r
+names(enoe)
+```
+
+    [1] "COE1T324" "COE2T324" "HOGT324"  "SDEMT324" "VIVT324" 
+
+Se observa que la función devuelve un objeto tipo lista. Puede definir
+cada objeto de forma separada, por ejemplo `sdem <- enoe$SDEMT324`, o
+bien puede utilizar `list2env` que crea $n$ objetos en el entorno de
+trabajo especificado según el número de objetos contenidos en la lista
+`x`. Por ejemplo, se crean los objetos contenidos en `enoe` en el
+entorno global.
+
+``` r
+list2env(enoe, envir = .GlobalEnv)
+```
+
+    <environment: R_GlobalEnv>
+
+``` r
+objects(pattern = "T324")
+```
+
+    [1] "COE1T324" "COE2T324" "HOGT324"  "SDEMT324" "VIVT324" 
+
+Ahora se puede trabajar con cada conjunto de datos de forma separada.
+
+``` r
+SDEMT324
+```
+
+    # A tibble: 423,118 × 114
+       r_def loc   mun   est   est_d_tri est_d_men ageb  t_loc_tri t_loc_men cd_a 
+       <chr> <chr> <chr> <chr> <chr>     <chr>     <chr> <chr>     <chr>     <chr>
+     1 0     <NA>  11    20    123       <NA>      0     1         <NA>      1    
+     2 0     <NA>  11    20    123       <NA>      0     1         <NA>      1    
+     3 0     <NA>  2     30    124       112       0     1         1         1    
+     4 0     <NA>  6     30    676       637       0     1         1         1    
+     5 0     <NA>  14    40    125       116       0     1         1         1    
+     6 0     <NA>  57    30    205       188       0     1         1         1    
+     7 0     <NA>  81    20    804       <NA>      0     2         <NA>      1    
+     8 0     <NA>  70    20    207       <NA>      0     2         <NA>      1    
+     9 0     <NA>  29    20    204       190       0     1         1         1    
+    10 0     <NA>  58    30    205       188       0     1         1         1    
+    # ℹ 423,108 more rows
+    # ℹ 104 more variables: ent <chr>, con <chr>, upm <chr>, d_sem <chr>,
+    #   n_pro_viv <chr>, v_sel <chr>, n_hog <chr>, h_mud <chr>, n_ent <chr>,
+    #   per <chr>, n_ren <chr>, c_res <chr>, par_c <chr>, sex <chr>, eda <chr>,
+    #   nac_dia <chr>, nac_mes <chr>, nac_anio <chr>, l_nac_c <chr>, cs_p12 <chr>,
+    #   cs_p13_1 <chr>, cs_p13_2 <chr>, cs_p14_c <chr>, cs_p15 <chr>, cs_p16 <chr>,
+    #   cs_p17 <chr>, n_hij <chr>, e_con <chr>, cs_p20a_1 <chr>, cs_p20a_c <chr>, …
+
+Cabe mencionar que el formato CSV devuelve un tibble donde todas las
+columnas son de tipo caracter. Se realizo de este modo para evitar
+errores al momento de detectar los distintos tipos de columna.
+
+## Ejemplo 2
+
+Se requiere obtener la tabla sociodemográfica de la ENOE correspondiente
+al año 2008 del cuarto trimestre en formato DBF.
+
+``` r
+sdem <- descargar_modulo(2008, 4, "sdem", "dbf")
+
+nrow(sdem)
+```
+
+    [1] 407232
+
+``` r
+ncol(sdem)
+```
+
+    [1] 104
+
+## Ejemplo 3
+
+```` markdown
+```{r}
+descargar_enoe(2020, 2, "csv")
+```
+````
+
+    Error en descargar_enoe(2020, 2, "csv"): 
+      No existe enlace para dicho periodo. Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio: <https://www.inegi.org.mx/investigacion/etoe/default.html#Microdatos>. Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son una aproximación a los indicadores de la ENOE. La comparación es útil como medida de referencia.
 
 # Detalles
 
@@ -107,14 +211,13 @@ if (year >= 2020 & !(year == 2020 & trimestre == 'trim1')) {
 ```
 ````
 
-En ese sentido, la función `descargar_enoe_n` puede considerarse como
-una actualización de `importinegi::enoe` en cuanto a que:
+En ese sentido, la función `descargar_enoe` puede considerarse como una
+actualización de `importinegi::enoe` en cuanto a que:
 
 - Actualiza los enlaces hasta la publicación de este documento (finales
   de julio de 2026),
 - Evita posibles errores cuando la descarga supera el tiempo máximo
-  establecido,
-- Permite la descarga de archivos de distinto formato,
+  establecido, \* Permite la descarga de archivos de distinto formato,
 - Mejora (al simplificar) la creación del objeto a retornar de la
   función
 
@@ -203,33 +306,14 @@ En ese sentido, las versiones previas de las funciones descritas
 anteriormente (`descargar_enoe` y `descargar_modulo`) requerían el
 enlace. Por ejemplo,
 
-``` r
+```` markdown
+```{r}
 descargar_modulo(
   url = "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_2025_trim1_csv.zip",
   modulo = "sdem"
 )
 ```
-
-    # A tibble: 423,302 × 114
-       r_def loc   mun   est   est_d_tri est_d_men ageb  t_loc_tri t_loc_men cd_a 
-       <chr> <chr> <chr> <chr> <chr>     <chr>     <chr> <chr>     <chr>     <chr>
-     1 0     <NA>  11    30    681       661       0     1         1         1    
-     2 0     <NA>  8     20    123       123       0     1         1         1    
-     3 0     <NA>  8     20    123       123       0     1         1         1    
-     4 0     <NA>  10    20    680       660       0     1         1         1    
-     5 0     <NA>  10    40    682       667       0     1         1         1    
-     6 0     <NA>  97    40    795       751       0     4         4         2    
-     7 0     <NA>  98    30    187       187       0     1         1         2    
-     8 0     <NA>  31    20    921       880       0     1         1         3    
-     9 0     <NA>  114   30    974       925       0     1         1         4    
-    10 0     <NA>  114   30    974       925       0     1         1         4    
-    # ℹ 423,292 more rows
-    # ℹ 104 more variables: ent <chr>, con <chr>, upm <chr>, d_sem <chr>,
-    #   n_pro_viv <chr>, v_sel <chr>, n_hog <chr>, h_mud <chr>, n_ent <chr>,
-    #   per <chr>, n_ren <chr>, c_res <chr>, par_c <chr>, sex <chr>, eda <chr>,
-    #   nac_dia <chr>, nac_mes <chr>, nac_anio <chr>, l_nac_c <chr>, cs_p12 <chr>,
-    #   cs_p13_1 <chr>, cs_p13_2 <chr>, cs_p14_c <chr>, cs_p15 <chr>, cs_p16 <chr>,
-    #   cs_p17 <chr>, n_hij <chr>, e_con <chr>, cs_p20a_1 <chr>, cs_p20a_c <chr>, …
+````
 
 No obstante, consideramos que las versiones actuales facilitan la
 automatización de dicha descarga.
@@ -244,124 +328,23 @@ este espacio es el siguiente:
 
 En específico, se generaron dos funciones debido a que a veces es
 necesario trabajar solamente con los microdatos de un módulo en
-específico, por ejemplo, estimar el total de la población o calcular los
-indicadores del mercado laboral mexicano se requiere los campos
-precodificados ubicados en el tabla sociodemográfica (`SDEM`), véase
-INEGI (2023) para más información.
+específico. Por ejemplo, para estimar el total de la población ocupada o
+para calcular los indicadores del mercado laboral mexicano se requieren
+los campos precodificados ubicados solamente en la tabla
+sociodemográfica (`SDEM`), véase INEGI (2023) para más información.
 
 # Actualizaciones
 
-La versión actual de las funciones `descargar_enoe_n` y
-`descargar_modulo_n` superan las limitaciones presentadas en
-`descargar_enoe` y `descargar_modulo` donde:
+La versión actual de las funciones `descargar_enoe` y `descargar_modulo`
+(v4.2) superan las limitaciones presentadas en las versiones previas
+donde:
 
 - Ya no es necesario ingresar manualmente el enlace: solamente debe
   especificarse el año y el trimestre de interés,
-- Permite descargar desde todos los formatos disponibles en el
-  repositorio del INEGI (además del CSV): DBF, STA, SAV,
+- Permite descargar todos los formatos disponibles en el repositorio del
+  INEGI (además del CSV): DBF, STA, SAV,
 - Algunas pruebas realizadas validan su ejecución incluso en periodos
   lejanos al actual
-
-# Ejemplos
-
-## Ejemplo 1
-
-Se desea obtener los microdatos correspondientes al tercer trimestre de
-2024.
-
-``` r
-enoe <- descargar_enoe_n(2024, 3, "csv")
-
-class(enoe)
-```
-
-    [1] "list"
-
-``` r
-names(enoe)
-```
-
-    [1] "COE1T324" "COE2T324" "HOGT324"  "SDEMT324" "VIVT324" 
-
-Se observa que la función devuelve un objeto tipo lista. Puede definir
-cada objeto de forma separada, por ejemplo `sdem <- enoe$SDEMT324`, o
-bien puede utilizar `list2env` que crea n objetos en el entorno de
-trabajo especificado según el número de objetos contenidos en la lista
-`x`. Por ejemplo, se crean los objetos contenidos en `enoe` en el
-entorno global.
-
-``` r
-list2env(enoe, envir = .GlobalEnv)
-```
-
-    <environment: R_GlobalEnv>
-
-``` r
-objects(pattern = "T324")
-```
-
-    [1] "COE1T324" "COE2T324" "HOGT324"  "SDEMT324" "VIVT324" 
-
-Ahora se puede trabajar con cada conjunto de datos de forma separada.
-
-``` r
-SDEMT324
-```
-
-    # A tibble: 423,118 × 114
-       r_def loc   mun   est   est_d_tri est_d_men ageb  t_loc_tri t_loc_men cd_a 
-       <chr> <chr> <chr> <chr> <chr>     <chr>     <chr> <chr>     <chr>     <chr>
-     1 0     <NA>  11    20    123       <NA>      0     1         <NA>      1    
-     2 0     <NA>  11    20    123       <NA>      0     1         <NA>      1    
-     3 0     <NA>  2     30    124       112       0     1         1         1    
-     4 0     <NA>  6     30    676       637       0     1         1         1    
-     5 0     <NA>  14    40    125       116       0     1         1         1    
-     6 0     <NA>  57    30    205       188       0     1         1         1    
-     7 0     <NA>  81    20    804       <NA>      0     2         <NA>      1    
-     8 0     <NA>  70    20    207       <NA>      0     2         <NA>      1    
-     9 0     <NA>  29    20    204       190       0     1         1         1    
-    10 0     <NA>  58    30    205       188       0     1         1         1    
-    # ℹ 423,108 more rows
-    # ℹ 104 more variables: ent <chr>, con <chr>, upm <chr>, d_sem <chr>,
-    #   n_pro_viv <chr>, v_sel <chr>, n_hog <chr>, h_mud <chr>, n_ent <chr>,
-    #   per <chr>, n_ren <chr>, c_res <chr>, par_c <chr>, sex <chr>, eda <chr>,
-    #   nac_dia <chr>, nac_mes <chr>, nac_anio <chr>, l_nac_c <chr>, cs_p12 <chr>,
-    #   cs_p13_1 <chr>, cs_p13_2 <chr>, cs_p14_c <chr>, cs_p15 <chr>, cs_p16 <chr>,
-    #   cs_p17 <chr>, n_hij <chr>, e_con <chr>, cs_p20a_1 <chr>, cs_p20a_c <chr>, …
-
-Cabe mencionar que el formato CSV devuelve un tibble donde todas las
-columnas son de tipo caracter. Se realizo de este modo para evitar
-errores al momento de detectar los distintos tipos de columna.
-
-## Ejemplo 2
-
-Se requiere obtener la tabla sociodemográfica de la ENOE correspondiente
-al año 2008 del cuarto trimestre en formato DBF.
-
-``` r
-sdem <- descargar_modulo_n(2008, 4, "sdem", "dbf")
-
-nrow(sdem)
-```
-
-    [1] 407232
-
-``` r
-ncol(sdem)
-```
-
-    [1] 104
-
-## Ejemplo 3
-
-```` markdown
-```{r}
-descargar_enoe_n(2020, 2, "csv")
-```
-````
-
-    Error en descargar_enoe_n(2020, 2, "csv"): 
-      No existe enlace para dicho periodo. Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio: <https://www.inegi.org.mx/investigacion/etoe/default.html#Microdatos>. Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son una aproximación a los indicadores de la ENOE. La comparación es útil como medida de referencia.
 
 # Referencias
 

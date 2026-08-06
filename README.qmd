@@ -11,7 +11,9 @@ format:
 
 # Introducción
 
-Este repositorio pretende generar el código fuente que permita descargar los microdatos de la ENOE directamente del repositorio del INEGI.
+Este repositorio consiste en descargar los microdatos de la ENOE directamente del repositorio del INEGI, es decir, sin la necesidad de ingresar el enlace.
+
+## Requisitos
 
 ```{r}
 #| label: setup
@@ -32,27 +34,77 @@ source(here::here("scripts", "0_funciones.R"))
 Las funciones desarrolladas son las siguientes:
 
 ```{{r}}
-# library(tidyverse)
-descargar_enoe_n(year, trimestre, formato)
-descargar_modulo_n(year, trimestre, modulo, formato)
+descargar_enoe(year, trimestre, formato = "csv")
+descargar_modulo(year, trimestre, modulo = "sdem", formato = "csv")
 ```
 
-* `descargar_enoe_n(year, trimestre, formato)`: obtiene los microdatos de TODOS los módulos, devuelve una lista donde cada elemento contiene cada módulo de la ENOE,
+* `descargar_enoe(year, trimestre, formato)`: obtiene los microdatos de TODOS los módulos (o tablas), devuelve una lista donde cada elemento contiene cada módulo de la ENOE,
 
-* `descargar_modulo_n(year, trimestre, modulo, formato)`: obtiene los microdatos de un módulo y devuelve ya sea un tibble (si se especificaron los formatos CSV, STA, SAV) o un data frame (en el caso de DBF).
+* `descargar_modulo(year, trimestre, modulo, formato)`: obtiene los microdatos de un módulo y devuelve ya sea un tibble (si se especificaron los formatos CSV, STA, SAV) o un data frame (en el caso de DBF).
 
 ## Argumentos
 
   * `year`: año de levantamiento de la encuesta (2005 a la actualidad),
   * `trimestre`: trimestre de levantamiento (1 a 4),
-  * `formato`: formato del archivo a descargar (CSV, DBF, STA, SAV),
+  * `formato`: formato del archivo a descargar (CSV, DBF, STA, SAV), por defecto en formato CSV,
   * `modulo`: tabla a seleccionar (INEGI, 2023, pp. 1-2): 
     * `hog`: hogar,
     * `viv`: vivienda,
-    * `sdem`: sociodemográfico
+    * `sdem`: sociodemográfico (por defecto),
     * `coe1`: cuestionario de ocupación y empleo I,
     * `coe2`: cuestionario de ocupación y empleo II,
   
+# Ejemplos
+
+## Ejemplo 1
+
+Se desea obtener los microdatos correspondientes al tercer trimestre de 2024.
+
+```{r}
+enoe <- descargar_enoe(2024, 3, "csv")
+
+class(enoe)
+names(enoe)
+```
+
+Se observa que la función devuelve un objeto tipo lista. Puede definir cada objeto de forma separada, por ejemplo `sdem <- enoe$SDEMT324`, o bien puede utilizar `list2env` que crea $n$ objetos en el entorno de trabajo especificado según el número de objetos contenidos en la lista `x`. Por ejemplo, se crean los objetos contenidos en `enoe` en el entorno global.
+
+```{r}
+list2env(enoe, envir = .GlobalEnv)
+
+objects(pattern = "T324")
+```
+
+Ahora se puede trabajar con cada conjunto de datos de forma separada.
+
+```{r}
+SDEMT324
+```
+
+Cabe mencionar que el formato CSV devuelve un tibble donde todas las columnas son de tipo caracter. Se realizo de este modo para evitar errores al momento de detectar los distintos tipos de columna.
+
+## Ejemplo 2
+
+Se requiere obtener la tabla sociodemográfica de la ENOE correspondiente al año 2008 del cuarto trimestre en formato DBF.
+
+```{r}
+sdem <- descargar_modulo(2008, 4, "sdem", "dbf")
+
+nrow(sdem)
+ncol(sdem)
+```
+
+## Ejemplo 3
+
+```{{r}}
+descargar_enoe(2020, 2, "csv")
+```
+
+```
+Error en descargar_enoe(2020, 2, "csv"): 
+  No existe enlace para dicho periodo. Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio: <https://www.inegi.org.mx/investigacion/etoe/default.html#Microdatos>. Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son una aproximación a los indicadores de la ENOE. La comparación es útil como medida de referencia.
+```
+
 # Detalles
 
 Existen tres maneras de importar los microdatos de la ENOE
@@ -99,11 +151,10 @@ if (year >= 2020 & !(year == 2020 & trimestre == 'trim1')) {
   }
 ```
 
-En ese sentido, la función `descargar_enoe_n` puede considerarse como una actualización de `importinegi::enoe` en cuanto a que:
+En ese sentido, la función `descargar_enoe` puede considerarse como una actualización de `importinegi::enoe` en cuanto a que:
 
 * Actualiza los enlaces hasta la publicación de este documento (finales de julio de 2026), 
-* Evita posibles errores cuando la descarga supera el tiempo máximo establecido, 
-* Permite la descarga de archivos de distinto formato,
+* Evita posibles errores cuando la descarga supera el tiempo máximo establecido, * Permite la descarga de archivos de distinto formato,
 * Mejora (al simplificar) la creación del objeto a retornar de la función 
 
 Para realizar esto último se tomo como fuente el código mostrado por Wickham y otros (2023, sección 26.3.4). 
@@ -176,7 +227,7 @@ enoe = function(year = NA, trimestre = NA, integrar = FALSE){
 
 En ese sentido, las versiones previas de las funciones descritas anteriormente (`descargar_enoe` y `descargar_modulo`) requerían el enlace. Por ejemplo,
 
-```{r}
+```{{r}}
 descargar_modulo(
   url = "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/enoe_2025_trim1_csv.zip",
   modulo = "sdem"
@@ -191,66 +242,15 @@ Así pues, el proceso computacional de las funciones desarrolladas en este espac
 2. Se descarga el archivo (comprimido) correspondiente, 
 3. Se cargan los archivos extraídos según el tipo de formato. 
 
-En específico, se generaron dos funciones debido a que a veces es necesario trabajar solamente con los microdatos de un módulo en específico, por ejemplo, estimar el total de la población o calcular los indicadores del mercado laboral mexicano se requiere los campos precodificados ubicados en el tabla sociodemográfica (`SDEM`), véase INEGI (2023) para más información.
+En específico, se generaron dos funciones debido a que a veces es necesario trabajar solamente con los microdatos de un módulo en específico. Por ejemplo, para estimar el total de la población ocupada o para calcular los indicadores del mercado laboral mexicano se requieren los campos precodificados ubicados solamente en la tabla sociodemográfica (`SDEM`), véase INEGI (2023) para más información.
 
 # Actualizaciones
 
-La versión actual de las funciones `descargar_enoe_n` y `descargar_modulo_n` superan las limitaciones presentadas en `descargar_enoe` y `descargar_modulo` donde:
+La versión actual de las funciones `descargar_enoe` y `descargar_modulo` (v4.2) superan las limitaciones presentadas en las versiones previas donde:
 
 * Ya no es necesario ingresar manualmente el enlace: solamente debe especificarse el año y el trimestre de interés,
-* Permite descargar desde todos los formatos disponibles en el repositorio del INEGI (además del CSV): DBF, STA, SAV,
+* Permite descargar todos los formatos disponibles en el repositorio del INEGI (además del CSV): DBF, STA, SAV,
 * Algunas pruebas realizadas validan su ejecución incluso en periodos lejanos al actual
-
-# Ejemplos
-
-## Ejemplo 1
-
-Se desea obtener los microdatos correspondientes al tercer trimestre de 2024.
-
-```{r}
-enoe <- descargar_enoe_n(2024, 3, "csv")
-
-class(enoe)
-names(enoe)
-```
-
-Se observa que la función devuelve un objeto tipo lista. Puede definir cada objeto de forma separada, por ejemplo `sdem <- enoe$SDEMT324`, o bien puede utilizar `list2env` que crea n objetos en el entorno de trabajo especificado según el número de objetos contenidos en la lista `x`. Por ejemplo, se crean los objetos contenidos en `enoe` en el entorno global.
-
-```{r}
-list2env(enoe, envir = .GlobalEnv)
-
-objects(pattern = "T324")
-```
-
-Ahora se puede trabajar con cada conjunto de datos de forma separada.
-
-```{r}
-SDEMT324
-```
-
-Cabe mencionar que el formato CSV devuelve un tibble donde todas las columnas son de tipo caracter. Se realizo de este modo para evitar errores al momento de detectar los distintos tipos de columna.
-
-## Ejemplo 2
-
-Se requiere obtener la tabla sociodemográfica de la ENOE correspondiente al año 2008 del cuarto trimestre en formato DBF.
-
-```{r}
-sdem <- descargar_modulo_n(2008, 4, "sdem", "dbf")
-
-nrow(sdem)
-ncol(sdem)
-```
-
-## Ejemplo 3
-
-```{{r}}
-descargar_enoe_n(2020, 2, "csv")
-```
-
-```
-Error en descargar_enoe_n(2020, 2, "csv"): 
-  No existe enlace para dicho periodo. Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio: <https://www.inegi.org.mx/investigacion/etoe/default.html#Microdatos>. Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son una aproximación a los indicadores de la ENOE. La comparación es útil como medida de referencia.
-```
 
 # Referencias
 
