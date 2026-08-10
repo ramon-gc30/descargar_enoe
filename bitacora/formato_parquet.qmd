@@ -1,0 +1,1122 @@
+---
+date: "09-08-2026"
+format: gfm
+---
+
+En `bitacora/aplicacion_porcentaje_pob_ocu_por_edu_2005-2025.qmd` se realizo una aplicación de las funciones que automatizan la descarga de microdatos de la ENOE. 
+
+Se intentará mejorar dichas funciones para incluir el formato parquet. Aquello se puede realizar con la función `parquetize::csv_to_parquet`. 
+
+```{r}
+#| label: setup
+#| message: false
+#| warning: false
+
+library(tidyverse)
+library(here)
+library(parquetize)
+library(arrow)
+```
+
+
+En primer lugar, la función `descargar_modulo`
+
+```{r}
+year <- 2026
+trimestre <- 1
+formato <- "csv"
+modulo <- "sdem"
+
+url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/"
+  
+  # obtener enlaces según el periodo
+  if (year >= 2023) {
+    url <- paste(url, "enoe_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else if ((year == 2020 & trimestre >= 3 ) | (year >= 2021 & year <= 2022)) {
+    url <- paste(url, "enoe_n_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else {
+    url <- paste(url, year, "trim", trimestre, "_", formato, ".zip", sep = "")
+  }
+  
+  # enlaces con casos especiales
+  # doble barra
+  if (year == 2024 & trimestre == 2) {
+    url <- sub(
+      x = url,
+      pattern = "/enoe_2024",
+      replacement = "//enoe_2024"
+    )
+  } else if (year == 2020 & trimestre == 2) {
+    # no existe enlace
+    stop("No existe enlace para dicho periodo. Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio: <https://www.inegi.org.mx/investigacion/etoe/default.html#Microdatos>. Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son una aproximación a los indicadores de la ENOE. La comparación es útil como medida de referencia.")
+  }
+  
+  # proceso de descarga
+  archivo_temp <- tempfile(fileext = ".zip")
+  
+  # se aumenta tiempo máximo de descarga para evitar error
+  options(timeout = max(900, getOption("timeout")))
+  
+  download.file(
+    url = url,
+    destfile = archivo_temp
+  )
+  
+  # lista de los microdatos comprimidos
+  microdatos <- unzip(archivo_temp, list = TRUE)$Name
+  
+  # extracción
+  unzip(
+    zipfile = archivo_temp, 
+    # modulo especifico
+    files = grepv(modulo, microdatos, ignore.case = TRUE),
+    exdir = tempdir()
+  )
+  
+  # ruta para cargar archivos
+  archivo_temp <- list.files(
+    path = tempdir(),
+    pattern = "\\.csv$|\\.dbf$|\\.dta$|\\.sav$",
+    full.names = TRUE,
+    ignore.case = TRUE
+  )
+```
+
+Hasta aquí se realizó el siguiente procedimiento:
+
+1. Se descargó el archivo desde el repositorio del INEGI
+2. Se extrajó solamente el módulo especificado
+
+Se valida
+
+```{r}
+list.files(tempdir())
+```
+
+Aquí se añade la conversión
+
+```{r}
+archivo_temp
+sub("\\.csv$", "\\.parquet", archivo_temp, ignore.case = TRUE)
+
+archivo_parquet <- sub("\\.csv$", "\\.parquet", archivo_temp, ignore.case = TRUE)
+```
+
+Con `csv_to_parquet` se especifica tanto la ruta del archivo CSV como la del archivo parquet
+
+```{r}
+csv_to_parquet(
+  path_to_file = archivo_temp,
+  path_to_parquet = archivo_parquet
+)
+```
+
+Se valida
+
+```{r}
+file.size(archivo_temp) / 1024**2
+file.size(archivo_parquet) / 1024**2
+# file.size(list.files(tempdir(), "\\.csv|\\.parquet", full.names = TRUE)) / 1024**2
+```
+
+Y se carga de forma individual con `read_parquet`
+
+```{r}
+read_parquet(archivo_parquet)
+```
+
+Entonces, solamente se añade
+
+```{{r}}
+# archivo de salida tipo parquet
+archivo_parquet <- sub("\\.csv$", "\\.parquet", archivo_temp, ignore.case = TRUE)
+
+# conversión
+csv_to_parquet(
+  path_to_file = archivo_temp,
+  path_to_parquet = archivo_parquet
+)
+
+# carga
+read_parquet(archivo_parquet)
+```
+
+Aquello dentro del operador condicional SI
+
+```{{r}}
+if (formato == "parquet"){
+  # archivo de salida tipo parquet
+  archivo_parquet <- sub("\\.csv$", "\\.parquet", archivo_temp, ignore.case = TRUE)
+
+  # conversión
+  csv_to_parquet(
+    path_to_file = archivo_temp,
+    path_to_parquet = archivo_parquet
+  )
+
+  # carga
+  read_parquet(archivo_parquet)
+}
+```
+
+Para el caso de todas las tablas
+
+```{r}
+list.files(tempdir(), "csv|parquet|zip", full.names = TRUE)
+unlink(list.files(tempdir(), "csv|parquet|zip", full.names = TRUE))
+list.files(tempdir(), "csv|parquet|zip", full.names = TRUE)
+```
+
+```{r}
+year <- 2026
+trimestre <- 1
+formato <- "csv"
+
+url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/"
+  
+  # obtener enlaces según el periodo
+  if (year >= 2023) {
+    url <- paste(url, "enoe_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else if ((year == 2020 & trimestre >= 3 ) | (year >= 2021 & year <= 2022)) {
+    url <- paste(url, "enoe_n_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else {
+    url <- paste(url, year, "trim", trimestre, "_", formato, ".zip", sep = "")
+  }
+  
+  # enlaces con casos especiales
+  # doble barra
+  if (year == 2024 & trimestre == 2) {
+    url <- sub(
+      x = url,
+      pattern = "/enoe_2024",
+      replacement = "//enoe_2024"
+    )
+  } else if (year == 2020 & trimestre == 2) {
+    # no existe enlace
+    stop("No existe enlace para dicho periodo. Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio: <https://www.inegi.org.mx/investigacion/etoe/default.html#Microdatos>. Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son una aproximación a los indicadores de la ENOE. La comparación es útil como medida de referencia.")
+  }
+  
+  # proceso de descarga
+  archivo_temp <- tempfile(fileext = ".zip")
+  
+  # se aumenta tiempo máximo de descarga para evitar error
+  options(timeout = max(900, getOption("timeout")))
+  
+  download.file(
+    url = url,
+    destfile = archivo_temp
+  )
+  
+  # extracción
+  unzip(
+    zipfile = archivo_temp,
+    exdir = tempdir()
+  )
+  
+  # ruta para cargar archivos
+  archivo_temp <- list.files(
+    path = tempdir(),
+    pattern = "\\.csv$|\\.dbf$|\\.dta$|\\.sav$",
+    full.names = TRUE,
+    ignore.case = TRUE
+  )
+  
+  # nombre para la lista
+  nombres <- basename(archivo_temp)
+  
+  nombres <- sub(
+    x = nombres,
+    pattern = "ENOE_",
+    replacement = ""
+  )
+  
+  nombres <- sub(
+    x = nombres,
+    pattern = "\\.csv|\\.dbf|\\.dta|\\.sav",
+    replacement = "",
+    ignore.case = TRUE
+  )
+```
+
+Se descargó el archivo y se extrajeron todas las tablas
+
+```{r}
+archivo_temp
+```
+
+Se realiza el procedimiento anterior
+
+```{r}
+sub("\\.csv$", "\\.parquet", archivo_temp)
+archivo_parquet <- sub("\\.csv$", "\\.parquet", archivo_temp)
+```
+
+Se convierten a tipo parquet
+
+```{{r}}
+archivo_temp
+archivo_parquet
+
+csv_to_parquet(
+  path_to_file = archivo_temp,
+  path_to_parquet = archivo_parquet
+)
+```
+
+Arroja el siguiente error
+
+```
+Error en if (is_remote(path)) {: the condition has length > 1
+```
+
+Es decir, solamente se puede un archivo ¿qué pasa si especifico la ruta del archivo comprimido?
+
+```{r}
+archivo_zip <- list.files(tempdir(), "\\.zip$", full.names = TRUE)
+archivo_zip
+```
+
+Se valida
+
+```{{r}}
+csv_to_parquet(
+  path_to_file = archivo_temp,
+  filename_in_zip = archivo_zip,
+  path_to_parquet = archivo_parquet
+)
+```
+
+También arroja error. Se tiene que hacer de forma iterativa. Se intenta con `map`
+
+```{{r}}
+archivo_temp |> 
+  map(
+    \(archivo_temp)
+      csv_to_parquet(
+        path_to_file = archivo_temp,
+        path_to_parquet = archivo_parquet
+      )
+  )
+```
+
+Arroja el siguiente error
+
+```
+Error in `map()`:
+ℹ In index: 1.
+Caused by error:
+! x is not a string (a length one character vector).
+Run `rlang::last_trace()` to see where the error occurred.
+```
+
+Se valida si se realizó la conversión
+
+```{r}
+file.size(archivo_parquet)
+```
+
+No, se intenta con `walk`
+
+```{{r}}
+archivo_temp |> 
+  walk(
+    \(archivo_temp)
+      csv_to_parquet(
+        path_to_file = archivo_temp,
+        path_to_parquet = archivo_parquet
+      )
+  )
+```
+
+Arroja el mismo error. Entonces, se intenta con `for`
+
+```{r}
+archivo_temp
+archivo_parquet
+basename(archivo_temp)
+sub("\\.csv", "", basename(archivo_temp))
+sub("\\.csv", "", basename(archivo_temp[[1]]))
+
+grep(sub("\\.csv", "", basename(archivo_temp[[1]])), archivo_temp)
+```
+
+Pero sé que `archivo_temp` es igual a `archivo_parquet`
+
+```{r}
+archivo_temp
+archivo_parquet
+```
+
+Por tanto,
+
+```{r}
+tamanio <- length(archivo_temp)
+i <- vector("integer", tamanio)
+
+for (i in 1:tamanio) {
+  csv_to_parquet(
+    path_to_file = archivo_temp[[i]],
+    path_to_parquet = archivo_parquet[[i]]
+  )
+}
+```
+
+Se valida
+
+```{r}
+file.size(archivo_parquet) / 1024**2
+```
+
+Y ahora ya podría crearse la lista
+
+```{r}
+importar_archivo <- arrow::read_parquet
+```
+
+Para lo cual tendría que reasignarse los valores de `archivo_temp` para contener los valores de `archivo_parquet`
+
+```{r}
+archivo_temp <- archivo_parquet
+archivo_temp
+```
+
+Ahora sí se crea la lista
+
+```{r}
+archivo_temp |> 
+  purrr::set_names(nombres) |> 
+  purrr::map(importar_archivo)
+```
+
+Por tanto, se añadiría
+
+```{{r}}
+# archivos de salida
+archivo_parquet <- sub("\\.csv$", "\\.parquet", archivo_temp)
+
+# conversión
+tamanio <- length(archivo_temp)
+i <- vector("integer", tamanio)
+
+for (i in 1:tamanio) {
+  csv_to_parquet(
+    path_to_file = archivo_temp[[i]],
+    path_to_parquet = archivo_parquet[[i]]
+  )
+}
+
+# para crear la lista
+importar_archivo <- arrow::read_parquet
+archivo_temp <- archivo_parquet
+```
+
+Aquello dentro del operador SI
+
+```{{r}}
+if (formato == "parquet")
+{
+  # archivos de salida
+  archivo_parquet <- sub("\\.csv$", "\\.parquet", archivo_temp)
+  
+  # conversión
+  tamanio <- length(archivo_temp)
+  i <- vector("integer", tamanio)
+  
+  for (i in 1:tamanio) { # con walk arroja error
+    csv_to_parquet(
+      path_to_file = archivo_temp[[i]],
+      path_to_parquet = archivo_parquet[[i]]
+    )
+  }
+  
+  # para crear la lista
+  importar_archivo <- arrow::read_parquet
+  archivo_temp <- archivo_parquet  
+}
+```
+
+Las funciones quedarían como sigue
+
+ANTES
+
+```{{r}}
+# Obtener todos los módulos sin enlace ========================================
+# arregla la función `importinegi::enoe`
+
+descargar_enoe <- function(year, trimestre, formato = "csv")
+{
+  url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/"
+  
+  # obtener enlaces según el periodo
+  if (year >= 2023) {
+    url <- paste(url, "enoe_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else if ((year == 2020 & trimestre >= 3 ) | (year >= 2021 & year <= 2022)) {
+    url <- paste(url, "enoe_n_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else {
+    url <- paste(url, year, "trim", trimestre, "_", formato, ".zip", sep = "")
+  }
+  
+  # enlaces con casos especiales
+  # doble barra
+  if (year == 2024 & trimestre == 2) {
+    url <- sub(
+      x = url,
+      pattern = "/enoe_2024",
+      replacement = "//enoe_2024"
+    )
+  } else if (year == 2020 & trimestre == 2) {
+    # no existe enlace
+    stop("No existe enlace para dicho periodo. Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio: <https://www.inegi.org.mx/investigacion/etoe/default.html#Microdatos>. Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son una aproximación a los indicadores de la ENOE. La comparación es útil como medida de referencia.")
+  }
+  
+  # proceso de descarga
+  archivo_temp <- tempfile(fileext = ".zip")
+  
+  # se aumenta tiempo máximo de descarga para evitar error
+  options(timeout = max(900, getOption("timeout")))
+  
+  download.file(
+    url = url,
+    destfile = archivo_temp
+  )
+  
+  # extracción
+  unzip(
+    zipfile = archivo_temp,
+    exdir = tempdir()
+  )
+  
+  # ruta para cargar archivos
+  archivo_temp <- list.files(
+    path = tempdir(),
+    pattern = "\\.csv$|\\.dbf$|\\.dta$|\\.sav$",
+    full.names = TRUE,
+    ignore.case = TRUE
+  )
+  
+  # nombre para la lista
+  nombres <- basename(archivo_temp)
+  
+  nombres <- sub(
+    x = nombres,
+    pattern = "ENOE_",
+    replacement = ""
+  )
+  
+  nombres <- sub(
+    x = nombres,
+    pattern = "\\.csv|\\.dbf|\\.dta|\\.sav",
+    replacement = "",
+    ignore.case = TRUE
+  )
+  
+  # especificar formato para importación
+  if (formato == "csv") {
+    importar_archivo <- \(archivo_temp)
+    readr::read_csv(
+      file = archivo_temp,
+      col_types = cols(.default = col_character())
+    )
+  } else if (formato == "dbf") {
+    importar_archivo <- foreign::read.dbf
+  } else if (formato == "dta") {
+    importar_archivo <- haven::read_dta
+  } else if (formato == "sav") {
+    importar_archivo <- haven::read_sav
+  }
+  
+  # La IA sugiere validar formato con una lista
+  # importar_archivo <- list(
+  #   csv = \(x) readr::read_csv(file = x, col_types = readr::cols(.default = readr::col_character())),
+  #   dbf = foreign::read.dbf,
+  #   dta = haven::read_dta,
+  #   sav = haven::read_sav
+  # )
+  # 
+  # importar_archivo <- importar_archivo[[formato]]
+  
+  # importación a un solo objeto tipo lista
+  # fuente R for Data Science (2nd ed.), sección 26.3.4
+  enoe <- archivo_temp |> 
+    purrr::set_names(nm = nombres) |> 
+    purrr::map(importar_archivo)
+  
+  # eliminación de archivos descargados y extraídos
+  archivo_temp <- list.files(
+    path = tempdir(),
+    pattern = "\\.zip$|\\.csv$|\\.dbf$|\\.dta$|\\.sav$",
+    full.names = TRUE,
+    ignore.case = TRUE
+  )
+  
+  unlink(archivo_temp)
+  
+  return(enoe)
+}
+
+# Obtener un módulo sin enlace ================================================
+
+descargar_modulo <- function(year, trimestre, modulo = "sdem", formato = "csv")
+{
+  url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/"
+  
+  # obtener enlaces según el periodo
+  if (year >= 2023) {
+    url <- paste(url, "enoe_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else if ((year == 2020 & trimestre >= 3 ) | (year >= 2021 & year <= 2022)) {
+    url <- paste(url, "enoe_n_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else {
+    url <- paste(url, year, "trim", trimestre, "_", formato, ".zip", sep = "")
+  }
+  
+  # enlaces con casos especiales
+  # doble barra
+  if (year == 2024 & trimestre == 2) {
+    url <- sub(
+      x = url,
+      pattern = "/enoe_2024",
+      replacement = "//enoe_2024"
+    )
+  } else if (year == 2020 & trimestre == 2) {
+    # no existe enlace
+    stop("No existe enlace para dicho periodo. Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio: <https://www.inegi.org.mx/investigacion/etoe/default.html#Microdatos>. Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son una aproximación a los indicadores de la ENOE. La comparación es útil como medida de referencia.")
+  }
+  
+  # proceso de descarga
+  archivo_temp <- tempfile(fileext = ".zip")
+  
+  # se aumenta tiempo máximo de descarga para evitar error
+  options(timeout = max(900, getOption("timeout")))
+  
+  download.file(
+    url = url,
+    destfile = archivo_temp
+  )
+  
+  # lista de los microdatos comprimidos
+  microdatos <- unzip(archivo_temp, list = TRUE)$Name
+  
+  # extracción
+  unzip(
+    zipfile = archivo_temp, 
+    # modulo especifico
+    files = grepv(modulo, microdatos, ignore.case = TRUE),
+    exdir = tempdir()
+  )
+  
+  # ruta para cargar archivos
+  archivo_temp <- list.files(
+    path = tempdir(),
+    pattern = "\\.csv$|\\.dbf$|\\.dta$|\\.sav$",
+    full.names = TRUE,
+    ignore.case = TRUE
+  )
+  
+  # nombre para la lista
+  nombres <- basename(archivo_temp)
+  
+  nombres <- sub(
+    x = nombres,
+    pattern = "ENOE_",
+    replacement = ""
+  )
+  
+  nombres <- sub(
+    x = nombres,
+    pattern = "\\.csv|\\.dbf|\\.dta|\\.sav",
+    replacement = "",
+    ignore.case = TRUE
+  )
+  
+  # importación según tipo de archivo
+  if (formato == "csv") {
+    enoe <- readr::read_csv(
+      file = archivo_temp,
+      col_types = cols(.default = col_character())
+    )
+  } else if (formato == "dbf") {
+    enoe <- foreign::read.dbf(archivo_temp)
+  } else if (formato == "dta") {
+    enoe <- haven::read_dta(archivo_temp)
+  } else if (formato == "sav") {
+    enoe <- haven::read_sav(archivo_temp)
+  }
+  
+  # eliminación de archivos descargados y extraídos
+  archivo_temp <- list.files(
+    path = tempdir(),
+    pattern = "\\.zip$|\\.csv$|\\.dbf$|\\.dta$|\\.sav$",
+    full.names = TRUE,
+    ignore.case = TRUE
+  )
+  
+  unlink(archivo_temp)
+  
+  return(enoe)
+}
+```
+
+AHORA
+
+```{r}
+# Obtener todos los módulos sin enlace ========================================
+# arregla la función `importinegi::enoe`
+
+descargar_enoe <- function(year, trimestre, formato = "csv")
+{
+  # para convertir a parquet se requiere csv
+  if (formato == "parquet") {
+    parquet <- 1
+    formato <- "csv"
+  }
+  
+  url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/"
+  
+  # obtener enlaces según el periodo
+  if (year >= 2023) {
+    url <- paste(url, "enoe_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else if ((year == 2020 & trimestre >= 3 ) | (year >= 2021 & year <= 2022)) {
+    url <- paste(url, "enoe_n_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else {
+    url <- paste(url, year, "trim", trimestre, "_", formato, ".zip", sep = "")
+  }
+  
+  # enlaces con casos especiales
+  # doble barra
+  if (year == 2024 & trimestre == 2) {
+    url <- sub(
+      x = url,
+      pattern = "/enoe_2024",
+      replacement = "//enoe_2024"
+    )
+  } else if (year == 2020 & trimestre == 2) {
+    # no existe enlace
+    stop("No existe enlace para dicho periodo. Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio: <https://www.inegi.org.mx/investigacion/etoe/default.html#Microdatos>. Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son una aproximación a los indicadores de la ENOE. La comparación es útil como medida de referencia.")
+  }
+  
+  # proceso de descarga
+  archivo_temp <- tempfile(fileext = ".zip")
+  
+  # se aumenta tiempo máximo de descarga para evitar error
+  options(timeout = max(900, getOption("timeout")))
+  
+  download.file(
+    url = url,
+    destfile = archivo_temp
+  )
+  
+  # extracción
+  unzip(
+    zipfile = archivo_temp,
+    exdir = tempdir()
+  )
+  
+  # ruta para cargar archivos
+  archivo_temp <- list.files(
+    path = tempdir(),
+    pattern = "\\.csv$|\\.dbf$|\\.dta$|\\.sav$",
+    full.names = TRUE,
+    ignore.case = TRUE
+  )
+  
+  # nombre para la lista
+  nombres <- basename(archivo_temp)
+  
+  nombres <- sub(
+    x = nombres,
+    pattern = "ENOE_",
+    replacement = ""
+  )
+  
+  nombres <- sub(
+    x = nombres,
+    pattern = "\\.csv|\\.dbf|\\.dta|\\.sav",
+    replacement = "",
+    ignore.case = TRUE
+  )
+  
+  if (exists("parquet")) {formato <- "parquet"}
+  
+  # especificar formato para importación
+  if (formato == "csv") {
+    importar_archivo <- \(archivo_temp)
+    readr::read_csv(
+      file = archivo_temp,
+      col_types = cols(.default = col_character())
+    )
+  } else if (formato == "dbf") {
+    importar_archivo <- foreign::read.dbf
+  } else if (formato == "dta") {
+    importar_archivo <- haven::read_dta
+  } else if (formato == "sav") {
+    importar_archivo <- haven::read_sav
+  } else if (formato == "parquet")
+  {
+    # archivos de salida
+    archivo_parquet <- sub("\\.csv$", "\\.parquet", archivo_temp)
+    
+    # conversión
+    tamanio <- length(archivo_temp)
+    i <- vector("integer", tamanio)
+    
+    for (i in 1:tamanio) { # con walk arroja error
+      parquetize::csv_to_parquet(
+        path_to_file = archivo_temp[[i]],
+        path_to_parquet = archivo_parquet[[i]]
+      )
+    }
+    
+    # para crear la lista
+    archivo_temp <- archivo_parquet
+    importar_archivo <- arrow::read_parquet
+  }
+  
+  # importación a un solo objeto tipo lista
+  # fuente R for Data Science (2nd ed.), sección 26.3.4
+  enoe <- archivo_temp |> 
+    purrr::set_names(nm = nombres) |> 
+    purrr::map(importar_archivo)
+  
+  # eliminación de archivos descargados y extraídos
+  archivo_temp <- list.files(
+    path = tempdir(),
+    pattern = "\\.zip$|\\.csv$|\\.dbf$|\\.dta$|\\.sav$|\\.parquet$",
+    full.names = TRUE,
+    ignore.case = TRUE
+  )
+  
+  unlink(archivo_temp)
+  
+  return(enoe)
+}
+
+# Obtener un módulo sin enlace ================================================
+
+descargar_modulo <- function(year, trimestre, modulo = "sdem", formato = "csv")
+{
+  # para convertir a parquet se requiere CSV
+  if (formato == "parquet") {
+    parquet <- 1
+    formato <- "csv"
+  }
+  
+  url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/"
+  
+  # obtener enlaces según el periodo
+  if (year >= 2023) {
+    url <- paste(url, "enoe_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else if ((year == 2020 & trimestre >= 3 ) | (year >= 2021 & year <= 2022)) {
+    url <- paste(url, "enoe_n_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else {
+    url <- paste(url, year, "trim", trimestre, "_", formato, ".zip", sep = "")
+  }
+  
+  # enlaces con casos especiales
+  # doble barra
+  if (year == 2024 & trimestre == 2) {
+    url <- sub(
+      x = url,
+      pattern = "/enoe_2024",
+      replacement = "//enoe_2024"
+    )
+  } else if (year == 2020 & trimestre == 2) {
+    # no existe enlace
+    stop("No existe enlace para dicho periodo. Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio: <https://www.inegi.org.mx/investigacion/etoe/default.html#Microdatos>. Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son una aproximación a los indicadores de la ENOE. La comparación es útil como medida de referencia.")
+  }
+  
+  # proceso de descarga
+  archivo_temp <- tempfile(fileext = ".zip")
+  
+  # se aumenta tiempo máximo de descarga para evitar error
+  options(timeout = max(900, getOption("timeout")))
+  
+  download.file(
+    url = url,
+    destfile = archivo_temp
+  )
+  
+  # lista de los microdatos comprimidos
+  microdatos <- unzip(archivo_temp, list = TRUE)$Name
+  
+  # extracción
+  unzip(
+    zipfile = archivo_temp, 
+    # modulo especifico
+    files = grepv(modulo, microdatos, ignore.case = TRUE),
+    exdir = tempdir()
+  )
+  
+  # ruta para cargar archivos
+  archivo_temp <- list.files(
+    path = tempdir(),
+    pattern = "\\.csv$|\\.dbf$|\\.dta$|\\.sav$",
+    full.names = TRUE,
+    ignore.case = TRUE
+  )
+  
+  # para convertir a parquet
+  if (exists("parquet")) {formato <- "parquet"}
+  
+  # importación según tipo de archivo
+  if (formato == "csv") {
+    enoe <- readr::read_csv(
+      file = archivo_temp,
+      col_types = cols(.default = col_character())
+    )
+  } else if (formato == "dbf") {
+    enoe <- foreign::read.dbf(archivo_temp)
+  } else if (formato == "dta") {
+    enoe <- haven::read_dta(archivo_temp)
+  } else if (formato == "sav") {
+    enoe <- haven::read_sav(archivo_temp)
+  } else if (formato == "parquet")
+  {
+    # archivo de salida tipo parquet
+    archivo_parquet <- sub("\\.csv$", "\\.parquet", archivo_temp, ignore.case = TRUE)
+  
+    # conversión
+    parquetize::csv_to_parquet(
+      path_to_file = archivo_temp,
+      path_to_parquet = archivo_parquet
+    )
+  
+    # carga
+    enoe <- arrow::read_parquet(archivo_parquet)
+  }
+  
+  # eliminación de archivos descargados y extraídos
+  archivo_temp <- list.files(
+    path = tempdir(),
+    pattern = "\\.zip$|\\.csv$|\\.dbf$|\\.dta$|\\.sav$|\\.parquet$",
+    full.names = TRUE,
+    ignore.case = TRUE
+  )
+  
+  unlink(archivo_temp)
+  
+  return(enoe)
+}
+```
+
+Al final se tuvo que añadir un operador condicional SI ya que para convertir a parquet se requiere un archivo CSV
+
+Se valida ejecución
+
+```{r}
+list.files(tempdir(), pattern = "csv|parquet|zip", full.names = TRUE)
+unlink(list.files(tempdir(), pattern = "csv|parquet|zip", full.names = TRUE))
+list.files(tempdir(), pattern = "csv|parquet|zip", full.names = TRUE)
+```
+
+Se valida
+
+```{r}
+descargar_modulo(2026, 1, "sdem", "parquet")
+```
+
+Listo!
+
+Se valida 
+
+```{r}
+list.files(tempdir(), pattern = "csv|parquet|zip", full.names = TRUE)
+```
+
+Se observa que no elimina los archivos ¿por qué?
+
+Se vuelve a ejecutar
+
+```{{r}}
+enoe <- descargar_modulo(2024, 2, "sdem", "parquet")
+```
+
+Me arroja error
+
+```{r}
+list.files(tempdir(), pattern = "csv|parquet|zip", full.names = TRUE)
+```
+
+Porque existen dos archivos CSV
+
+Se eliminan
+
+```{r}
+unlink(list.files(tempdir(), pattern = "csv|parquet|zip", full.names = TRUE))
+list.files(tempdir(), pattern = "csv|parquet|zip", full.names = TRUE)
+```
+
+Se vuelve a ejecutar
+
+```{r}
+enoe <- descargar_modulo(2024, 2, "sdem", "parquet")
+```
+
+Se valida
+
+```{r}
+# enoe
+list.files(tempdir(), pattern = "csv|parquet|zip", full.names = TRUE)
+unlink(list.files(tempdir(), pattern = "csv|parquet|zip", full.names = TRUE))
+list.files(tempdir(), pattern = "csv|parquet|zip", full.names = TRUE)
+```
+
+Porque ahora sí los elimina y dentro de la función no?
+
+Se fuerza la eliminación
+
+```{r}
+descargar_modulo <- function(year, trimestre, modulo = "sdem", formato = "csv")
+{
+  # para convertir a parquet se requiere CSV
+  if (formato == "parquet") {
+    parquet <- 1
+    formato <- "csv"
+  }
+  
+  url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/"
+  
+  # obtener enlaces según el periodo
+  if (year >= 2023) {
+    url <- paste(url, "enoe_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else if ((year == 2020 & trimestre >= 3 ) | (year >= 2021 & year <= 2022)) {
+    url <- paste(url, "enoe_n_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else {
+    url <- paste(url, year, "trim", trimestre, "_", formato, ".zip", sep = "")
+  }
+  
+  # enlaces con casos especiales
+  # doble barra
+  if (year == 2024 & trimestre == 2) {
+    url <- sub(
+      x = url,
+      pattern = "/enoe_2024",
+      replacement = "//enoe_2024"
+    )
+  } else if (year == 2020 & trimestre == 2) {
+    # no existe enlace
+    stop("No existe enlace para dicho periodo. Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio: <https://www.inegi.org.mx/investigacion/etoe/default.html#Microdatos>. Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son una aproximación a los indicadores de la ENOE. La comparación es útil como medida de referencia.")
+  }
+  
+  # proceso de descarga
+  archivo_temp <- tempfile(fileext = ".zip")
+  
+  # se aumenta tiempo máximo de descarga para evitar error
+  options(timeout = max(900, getOption("timeout")))
+  
+  download.file(
+    url = url,
+    destfile = archivo_temp
+  )
+  
+  # lista de los microdatos comprimidos
+  microdatos <- unzip(archivo_temp, list = TRUE)$Name
+  
+  # extracción
+  unzip(
+    zipfile = archivo_temp, 
+    # modulo especifico
+    files = grepv(modulo, microdatos, ignore.case = TRUE),
+    exdir = tempdir()
+  )
+  
+  # ruta para cargar archivos
+  archivo_temp <- list.files(
+    path = tempdir(),
+    pattern = "\\.csv$|\\.dbf$|\\.dta$|\\.sav$",
+    full.names = TRUE,
+    ignore.case = TRUE
+  )
+  
+  # para convertir a parquet
+  if (exists("parquet")) {formato <- "parquet"}
+  
+  # importación según tipo de archivo
+  if (formato == "csv") {
+    enoe <- readr::read_csv(
+      file = archivo_temp,
+      col_types = cols(.default = col_character())
+    )
+  } else if (formato == "dbf") {
+    enoe <- foreign::read.dbf(archivo_temp)
+  } else if (formato == "dta") {
+    enoe <- haven::read_dta(archivo_temp)
+  } else if (formato == "sav") {
+    enoe <- haven::read_sav(archivo_temp)
+  } else if (formato == "parquet")
+  {
+    # archivo de salida tipo parquet
+    archivo_parquet <- sub("\\.csv$", "\\.parquet", archivo_temp, ignore.case = TRUE)
+  
+    # conversión
+    parquetize::csv_to_parquet(
+      path_to_file = archivo_temp,
+      path_to_parquet = archivo_parquet
+    )
+  
+    # carga
+    enoe <- arrow::read_parquet(archivo_parquet)
+  }
+  
+  # eliminación de archivos descargados y extraídos
+  archivo_temp <- list.files(
+    path = tempdir(),
+    pattern = "\\.zip$|\\.csv$|\\.dbf$|\\.dta$|\\.sav$|\\.parquet$",
+    full.names = TRUE,
+    ignore.case = TRUE
+  )
+  
+  unlink(archivo_temp, force = TRUE)
+  
+  return(enoe)
+}
+```
+
+Se vuelve a ejecutar
+
+```{r}
+# list.files(tempdir(), pattern = "csv|parquet|zip", full.names = TRUE)
+
+enoe <- descargar_modulo(2025, 2, "sdem", "parquet")
+```
+
+Se valida
+
+```{r}
+list.files(tempdir(), pattern = "csv|parquet|zip", full.names = TRUE)
+```
+
+Se intenta con `file.remove`
+
+```{r}
+unlink(list.files(tempdir(), pattern = "csv|parquet|zip", full.names = TRUE))
+list.files(tempdir(), pattern = "csv|parquet|zip", full.names = TRUE)
+file.remove(list.files(tempdir(), pattern = "csv|parquet|zip", full.names = TRUE))
+list.files(tempdir(), pattern = "csv|parquet|zip", full.names = TRUE)
+```
+
+Se elimina
+
+```{r}
+remove(enoe)
+```
+
+Se vuelve a ejecutar
+
+```{r}
+file.remove(list.files(tempdir(), pattern = "csv|parquet|zip", full.names = TRUE))
+list.files(tempdir(), pattern = "csv|parquet|zip", full.names = TRUE)
+```
+
+No puedo eliminarlo ¿por qué?
+
+La IA menciona que es posible que una función esté utilizando los archivos y "no los suelte". Se puede solucionar con:
+
+* forzar recolección de basura con `gc`
+* desactivar el mapeo de memoria `read_parquet(mmap = FALSE)`
+* Usar `on.exit`
+
+Pero menciona que pasar de CV a Parquet y después cargarlo como tibble no existe una eficiencia en la ejecución. Cuestión que estoy de acuerdo. Conviene cargarlo como conjunto de datos. Por lo cual, tendría que guardar el o los archivos parquet al directorio actual. No obstante, "el único error posible que veo es que un usuario ejecute sin guardar previamente su documento quarto o r"
+
+Se realiza aquello en un nuevo documento.
+
+
