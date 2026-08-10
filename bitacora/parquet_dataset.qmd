@@ -1,0 +1,487 @@
+---
+date: "09-08-2026"
+format: gfm
+---
+
+A partir de lo encontrado en `bitacora/formato_parquet.qmd`, se intentará añadir el formato parquet para cargarlo como conjunto de datos (dataset), y no como tibble.
+
+```{r}
+#| label: setup
+#| message: false
+#| warning: false
+
+library(tidyverse)
+library(here)
+library(parquetize)
+library(arrow)
+```
+
+
+Recordemos que no se puede mantener los archivos de origen/entrada en el directorio temporal, por tanto deben guardarse en el directorio actual de trabajo.
+
+```{r}
+getwd()
+dir.exists(file.path(getwd(), "datos"))
+```
+
+DESCARGAR UN MÓDULO
+
+```{r}
+year <- 2026
+trimestre <- 1
+formato <- "parquet"
+modulo <- "sdem"
+
+if (formato == "parquet") {
+  parquet <- 1
+  formato <- "csv"
+}
+
+url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/"
+  
+  # obtener enlaces según el periodo
+  if (year >= 2023) {
+    url <- paste(url, "enoe_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else if ((year == 2020 & trimestre >= 3 ) | (year >= 2021 & year <= 2022)) {
+    url <- paste(url, "enoe_n_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else {
+    url <- paste(url, year, "trim", trimestre, "_", formato, ".zip", sep = "")
+  }
+  
+  # enlaces con casos especiales
+  # doble barra
+  if (year == 2024 & trimestre == 2) {
+    url <- sub(
+      x = url,
+      pattern = "/enoe_2024",
+      replacement = "//enoe_2024"
+    )
+  } else if (year == 2020 & trimestre == 2) {
+    # no existe enlace
+    stop("No existe enlace para dicho periodo. Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio: <https://www.inegi.org.mx/investigacion/etoe/default.html#Microdatos>. Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son una aproximación a los indicadores de la ENOE. La comparación es útil como medida de referencia.")
+  }
+  
+  # proceso de descarga
+  archivo_temp <- tempfile(fileext = ".zip")
+  
+  # se aumenta tiempo máximo de descarga para evitar error
+  options(timeout = max(900, getOption("timeout")))
+  
+  download.file(
+    url = url,
+    destfile = archivo_temp
+  )
+  
+  # lista de los microdatos comprimidos
+  microdatos <- unzip(archivo_temp, list = TRUE)$Name
+  
+  # extracción
+  unzip(
+    zipfile = archivo_temp, 
+    # modulo especifico
+    files = grepv(modulo, microdatos, ignore.case = TRUE),
+    exdir = tempdir()
+  )
+  
+  # ruta para cargar archivos
+  archivo_temp <- list.files(
+    path = tempdir(),
+    pattern = "\\.csv$|\\.dbf$|\\.dta$|\\.sav$",
+    full.names = TRUE,
+    ignore.case = TRUE
+  )
+```
+
+Se tiene la ruta de los archivos csv
+
+```{r}
+archivo_temp
+```
+
+Ahora se debe crear la ruta del archivo parquet en el directorio actual
+
+```{r}
+basename(archivo_temp)
+sub("csv", "parquet", basename(archivo_temp))
+getwd()
+```
+
+La carpeta se llamará ENOE
+
+```{r}
+dir.exists(file.path(getwd(), "ENOE"))
+```
+
+Se crea si no existe
+
+```{r}
+if (dir.exists(file.path(getwd(), "ENOE")) == FALSE) {
+  dir.create(file.path(getwd(), "ENOE"))
+}
+```
+
+Ahora se crea ruta del archivo parquet
+
+```{r}
+file.path(getwd(), "ENOE")
+# paste(file.path(getwd(), "ENOE"), sub("csv", "parquet", basename(archivo_temp)), sep = "/")
+file.path(getwd(), "ENOE", sub("csv", "parquet", basename(archivo_temp)))
+```
+
+Y ahí se almacena
+
+```{r}
+archivo_parquet <- file.path(getwd(), "ENOE", sub("csv", "parquet", basename(archivo_temp)))
+archivo_parquet
+```
+
+Ahora se convierte
+
+```{r}
+parquetize::csv_to_parquet(
+  path_to_file = archivo_temp,
+  path_to_parquet = archivo_parquet
+)
+```
+
+Se valida
+
+```{r}
+file.size(archivo_parquet) / 1024**2
+```
+
+Y ya se carga como conjunto de datos
+
+```{r}
+# open_dataset(archivo_parquet, format = "parquet")
+open_dataset(archivo_parquet)
+```
+
+
+Por tanto quedaría así
+
+```{r}
+nombre <- basename(archivo_temp)
+nombre <- sub("csv", "parquet", nombre)
+# nombre <- sub("ENOE_", "", nombre)
+# nombre
+
+directorio <- file.path(getwd(), "ENOE")
+
+if (dir.exists(directorio) == FALSE) {
+  dir.create(directorio)
+}
+
+archivo_parquet <- file.path(directorio, nombre)
+
+parquetize::csv_to_parquet(
+  path_to_file = archivo_temp,
+  path_to_parquet = archivo_parquet
+)
+
+# open_dataset(archivo_parquet)
+```
+
+Para el caso de todos las tablas
+
+Se eliminan los archivos previamente descargados
+
+```{r}
+unlink(archivo_temp)
+list.files(tempdir(), "csv|parquet|zip", full.names = TRUE)
+```
+
+Se ejecuta versión actual
+
+```{r}
+year <- 2026
+trimestre <- 1
+formato <- "parquet"
+
+if (formato == "parquet") {
+  parquet <- 1
+  formato <- "csv"
+}
+
+url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/"
+  
+  # obtener enlaces según el periodo
+  if (year >= 2023) {
+    url <- paste(url, "enoe_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else if ((year == 2020 & trimestre >= 3 ) | (year >= 2021 & year <= 2022)) {
+    url <- paste(url, "enoe_n_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else {
+    url <- paste(url, year, "trim", trimestre, "_", formato, ".zip", sep = "")
+  }
+  
+  # enlaces con casos especiales
+  # doble barra
+  if (year == 2024 & trimestre == 2) {
+    url <- sub(
+      x = url,
+      pattern = "/enoe_2024",
+      replacement = "//enoe_2024"
+    )
+  } else if (year == 2020 & trimestre == 2) {
+    # no existe enlace
+    stop("No existe enlace para dicho periodo. Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio: <https://www.inegi.org.mx/investigacion/etoe/default.html#Microdatos>. Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son una aproximación a los indicadores de la ENOE. La comparación es útil como medida de referencia.")
+  }
+  
+  # proceso de descarga
+  archivo_temp <- tempfile(fileext = ".zip")
+  
+  # se aumenta tiempo máximo de descarga para evitar error
+  options(timeout = max(900, getOption("timeout")))
+  
+  download.file(
+    url = url,
+    destfile = archivo_temp
+  )
+  
+  # extracción
+  unzip(
+    zipfile = archivo_temp,
+    exdir = tempdir()
+  )
+  
+  # ruta para cargar archivos
+  archivo_temp <- list.files(
+    path = tempdir(),
+    pattern = "\\.csv$|\\.dbf$|\\.dta$|\\.sav$",
+    full.names = TRUE,
+    ignore.case = TRUE
+  )
+  
+  # nombre para la lista
+  nombres <- basename(archivo_temp)
+  
+  nombres <- sub(
+    x = nombres,
+    pattern = "ENOE_",
+    replacement = ""
+  )
+  
+  nombres <- sub(
+    x = nombres,
+    pattern = "\\.csv|\\.dbf|\\.dta|\\.sav",
+    replacement = "",
+    ignore.case = TRUE
+  )
+```
+
+Se valida
+
+```{r}
+nombres
+archivo_temp
+```
+
+Se realiza procedimiento anterior
+
+```{r}
+archivo_parquet <- basename(archivo_temp)
+archivo_parquet <- sub("csv", "parquet", archivo_parquet)
+
+directorio <- file.path(getwd(), "ENOE")
+
+if (dir.exists(directorio) == FALSE) {
+  dir.create(directorio)
+}
+
+archivo_parquet <- file.path(directorio, archivo_parquet)
+```
+
+Se itera el procedimiento de conversión
+
+```{r}
+# archivo_temp
+# archivo_parquet
+tamanio <- length(archivo_temp)
+i <- vector("integer", tamanio)
+
+for (i in 1:tamanio) {
+  csv_to_parquet(
+    path_to_file = archivo_temp[[i]],
+    path_to_parquet = archivo_parquet[[i]]
+  )
+}
+```
+
+Se valida
+
+```{r}
+file.size(archivo_parquet) / 1024**2
+```
+
+Ahora se carga conjunto de datos
+
+```{r}
+open_dataset(archivo_parquet)
+```
+
+Se eliminan archivos csv
+
+```{r}
+file.remove(archivo_temp)
+```
+
+Se valida
+
+```{r}
+list.files(tempdir(), pattern = "csv")
+file.remove(list.files(tempdir(), pattern = "csv"))
+```
+
+Siempre deja un archivo disponible ¿por qué?
+
+```{r}
+remove(archivo_temp)
+file.remove(list.files(tempdir(), pattern = "\\.csv$"))
+list.files(tempdir(), pattern = "csv")
+```
+
+```{r}
+base::gc()
+list.files(tempdir())
+file.remove(list.files(tempdir(), pattern = "csv"))
+```
+
+El código de dicha función es:
+
+```{{r}}
+csv_to_parquet <- function(
+    path_to_file,
+    url_to_csv = lifecycle::deprecated(),
+    csv_as_a_zip = lifecycle::deprecated(),
+    filename_in_zip,
+    path_to_parquet,
+    columns = "all",
+    compression = "snappy",
+    compression_level = NULL,
+    partition = "no",
+    encoding = "UTF-8",
+    read_delim_args = list(),
+    ...
+) {
+  if (!missing(url_to_csv)) {
+    lifecycle::deprecate_warn(
+      when = "0.5.5",
+      what = "csv_to_parquet(url_to_csv)",
+      details = "This argument is replaced by path_to_file."
+    )
+  }
+
+  if (!missing(csv_as_a_zip)) {
+    lifecycle::deprecate_warn(
+      when = "0.5.5",
+      what = "csv_to_parquet(csv_as_a_zip)",
+      details = "This argument is no longer needed, parquetize detect zip file by extension."
+    )
+  }
+
+  # Check if at least one of the two arguments path_to_file or url_to_csv is set
+  if (missing(path_to_file) & missing(url_to_csv)) {
+    cli_abort("Be careful, you have to fill the path_to_file argument", class = "parquetize_missing_argument")
+  }
+
+  # Check if path_to_parquet is missing
+  if (missing(path_to_parquet)) {
+    cli_abort("Be careful, the argument path_to_parquet must be filled in", class = "parquetize_missing_argument")
+  }
+
+  # Check if columns argument is a character vector
+  if (isFALSE(is.vector(columns) & is.character(columns))) {
+    cli_abort(c("Be careful, the argument columns must be a character vector",
+              'You can use `all` or `c("col1", "col2"))`'),
+              class = "parquetize_bad_argument")
+  }
+
+  if (missing(path_to_file)) {
+    path_to_file <- url_to_csv
+  }
+
+  input_file <- download_extract(path_to_file, filename_in_zip)
+
+  Sys.sleep(0.01)
+  cli_progress_message("Reading data...")
+
+  csv_output <- inject(
+    read_delim(
+      file = input_file,
+      locale = locale(encoding = encoding),
+      lazy = TRUE,
+      show_col_types = FALSE,
+      col_select = if (identical(columns,"all")) everything() else all_of(columns),
+      !!!read_delim_args
+    )
+  )
+
+  dataset <- write_parquet_at_once(
+    csv_output,
+    path_to_parquet,
+    partition,
+    compression,
+    compression_level,
+    ...)
+
+  return(invisible(dataset))
+}
+```
+
+Me llama la atención:
+
+```{{r}}
+input_file <- download_extract(path_to_file, filename_in_zip)
+
+dataset <- write_parquet_at_once(
+    csv_output,
+    path_to_parquet,
+    partition,
+    compression,
+    compression_level,
+    ...)
+```
+
+Considero, a priori, aquellas funciones podrían estar generando el "error"
+
+Otro modo de crear los archivos parquet sería con `write_parquet` después de crear el objeto
+
+Algo como
+
+```{´{r}}
+# importación según tipo de archivo
+  if (formato == "csv" & parquet != 1) {
+    enoe <- readr::read_csv(
+      file = archivo_temp,
+      col_types = cols(.default = col_character())
+    )
+  } else if (formato == "dbf") {
+    enoe <- foreign::read.dbf(archivo_temp)
+  } else if (formato == "dta") {
+    enoe <- haven::read_dta(archivo_temp)
+  } else if (formato == "sav") {
+    enoe <- haven::read_sav(archivo_temp)
+  } else if (formato == "csv" & parquet == 1) {
+    enoe <- read_csv_arrow(archivo_temp)
+  }
+  
+  # importación a un solo objeto tipo lista
+  # fuente R for Data Science (2nd ed.), sección 26.3.4
+  if (!exists(parquet)) {
+    enoe <- archivo_temp |> 
+      purrr::set_names(nm = nombres) |> 
+      purrr::map(importar_archivo)
+  } else {
+    # aquí añadir la función de guardar
+    for (i in 1:tamanio){
+      write_dataset(
+        x = enoe[[i]],
+        sink = archivo_parquet[[i]]
+      )
+    }
+    
+    enoe <- archivo_parquet # devuelve la ruta
+  }
+```
+
+Algo así
