@@ -2,3 +2,6 @@
 .Rhistory
 .RData
 .Ruserdata
+# ignorar archivos parquet
+*.parquet
+/datos
