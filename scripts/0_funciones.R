@@ -3,6 +3,14 @@
 
 descargar_enoe <- function(year, trimestre, formato = "csv")
 {
+  # para formato parquet se requiere csv
+  if (formato != "parquet") {
+    parquet <- 0
+  } else {
+    formato <- "csv"
+    parquet <- 1
+  }
+  
   url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/"
   
   # obtener enlaces según el periodo
@@ -57,7 +65,7 @@ descargar_enoe <- function(year, trimestre, formato = "csv")
   
   nombres <- sub(
     x = nombres,
-    pattern = "ENOE_",
+    pattern = "ENOE_|ENOEN_",
     replacement = ""
   )
   
@@ -99,6 +107,32 @@ descargar_enoe <- function(year, trimestre, formato = "csv")
     purrr::set_names(nm = nombres) |> 
     purrr::map(importar_archivo)
   
+  # con formato parquet se exportan archivos
+  if (parquet == 1) {
+    # archivos de salida
+    archivo_parquet <- basename(archivo_temp)
+    archivo_parquet <- sub("csv", "parquet", archivo_parquet)
+    directorio <- file.path(getwd(), "ENOE")
+    
+    if (dir.exists(directorio) == FALSE) { dir.create(directorio) }
+    
+    archivo_parquet <- file.path(directorio, archivo_parquet)
+    
+    # exportación 
+    tamanio <- length(archivo_parquet)
+    i <- vector("integer", tamanio)
+    
+    for (i in 1:tamanio) {
+      write_parquet(
+        x = enoe[[i]],
+        sink = grepv(nombres[[i]], archivo_parquet, ignore.case = TRUE)
+      )
+    }
+    
+    # carga
+    enoe <- open_dataset(archivo_parquet)
+  }
+  
   # eliminación de archivos descargados y extraídos
   archivo_temp <- list.files(
     path = tempdir(),
@@ -116,6 +150,14 @@ descargar_enoe <- function(year, trimestre, formato = "csv")
 
 descargar_modulo <- function(year, trimestre, modulo = "sdem", formato = "csv")
 {
+  # formato parquet requiere csv
+  if (formato != "parquet") {
+    parquet <- 0
+  } else {
+    formato <- "csv"
+    parquet <- 1
+  }
+  
   url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/"
   
   # obtener enlaces según el periodo
@@ -170,22 +212,6 @@ descargar_modulo <- function(year, trimestre, modulo = "sdem", formato = "csv")
     ignore.case = TRUE
   )
   
-  # nombre para la lista
-  nombres <- basename(archivo_temp)
-  
-  nombres <- sub(
-    x = nombres,
-    pattern = "ENOE_",
-    replacement = ""
-  )
-  
-  nombres <- sub(
-    x = nombres,
-    pattern = "\\.csv|\\.dbf|\\.dta|\\.sav",
-    replacement = "",
-    ignore.case = TRUE
-  )
-  
   # importación según tipo de archivo
   if (formato == "csv") {
     enoe <- readr::read_csv(
@@ -198,6 +224,27 @@ descargar_modulo <- function(year, trimestre, modulo = "sdem", formato = "csv")
     enoe <- haven::read_dta(archivo_temp)
   } else if (formato == "sav") {
     enoe <- haven::read_sav(archivo_temp)
+  }
+  
+  # en formato parquet se exportan archivos 
+  if (parquet == 1) {
+    # archivos de salida
+    archivo_parquet <- basename(archivo_temp)
+    archivo_parquet <- sub("csv", "parquet", archivo_parquet)
+    directorio <- file.path(getwd(), "ENOE")
+    
+    if (dir.exists(directorio) == FALSE) { dir.create(directorio) } 
+    
+    archivo_parquet <- file.path(directorio, archivo_parquet)
+    
+    # guardar/exportar
+    write_parquet(
+      x = enoe,
+      sink = archivo_parquet
+    )
+    
+    # carga como conjunto de datos
+    enoe <- open_dataset(archivo_parquet)
   }
   
   # eliminación de archivos descargados y extraídos
