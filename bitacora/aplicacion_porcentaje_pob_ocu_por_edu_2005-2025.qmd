@@ -1,0 +1,701 @@
+---
+date: "06-08-2026"
+format: gfm 
+---
+
+En este documento se verá una aplicación de las funciones que descargan los microdatos de la ENOE.
+
+```{r}
+#| label: setup
+#| warning: false
+#| message: false
+
+library(tidyverse)
+library(here)
+library(arrow)
+
+source(here::here("scripts", "0_funciones.R"))
+```
+
+Se intentará validar la composición de la población ocupada por nivel educativo para el periodo 2005-2025, de forma quinquenal, es decir, cada cinco años. Al mismo tiempo, se validará el crecimiento de la población ocupada también por nivel educativo.
+
+Para tal fin, se utilizarán los microdatos del tercer trimestre.
+
+En primer lugar, se obtendrán los datos
+
+```{r}
+enoe_t305 <- descargar_modulo(2005, 3)
+```
+
+Se convierte a tabla arrow con `as_arrow_table`
+
+```{r}
+as_arrow_table(enoe_t305)
+```
+
+Se intenta iterar dicho proceso
+
+```{{r}}
+year_inicio <- 2005
+year_final <- 2025
+
+while (year_inicio <= year_final) {
+  assign(
+    x = paste("enoe", year_inicio, "t3"),
+    value = descargar_modulo(year_inicio, 3),
+    envir = .GlobalEnv
+  )
+
+  year_inicio + 5 
+}
+```
+
+Pero para lograrlo debemos cambiar la función `descargar_modulo` para que se cargue a formato csv arrow
+
+```{r}
+descargar_modulo <- function(year, trimestre, modulo = "sdem", formato = "csv")
+{
+  url <- "https://www.inegi.org.mx/contenidos/programas/enoe/15ymas/microdatos/"
+  
+  # obtener enlaces según el periodo
+  if (year >= 2023) {
+    url <- paste(url, "enoe_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else if ((year == 2020 & trimestre >= 3 ) | (year >= 2021 & year <= 2022)) {
+    url <- paste(url, "enoe_n_", year, "_trim", trimestre, "_", formato, ".zip", sep = "")
+  } else {
+    url <- paste(url, year, "trim", trimestre, "_", formato, ".zip", sep = "")
+  }
+  
+  # enlaces con casos especiales
+  # doble barra
+  if (year == 2024 & trimestre == 2) {
+    url <- sub(
+      x = url,
+      pattern = "/enoe_2024",
+      replacement = "//enoe_2024"
+    )
+  } else if (year == 2020 & trimestre == 2) {
+    # no existe enlace
+    stop("No existe enlace para dicho periodo. Se sugiere utilizar las bases de datos de la ETOE, la cual proporciona información para los meses de abril, mayo y junio: <https://www.inegi.org.mx/investigacion/etoe/default.html#Microdatos>. Las cifras que ofrece ETOE no son estrictamente comparables con ENOE pero son una aproximación a los indicadores de la ENOE. La comparación es útil como medida de referencia.")
+  }
+  
+  # proceso de descarga
+  archivo_temp <- tempfile(fileext = ".zip")
+  
+  # se aumenta tiempo máximo de descarga para evitar error
+  options(timeout = max(900, getOption("timeout")))
+  
+  download.file(
+    url = url,
+    destfile = archivo_temp
+  )
+  
+  # lista de los microdatos comprimidos
+  microdatos <- unzip(archivo_temp, list = TRUE)$Name
+  
+  # extracción
+  unzip(
+    zipfile = archivo_temp, 
+    # modulo especifico
+    files = grepv(modulo, microdatos, ignore.case = TRUE),
+    exdir = tempdir()
+  )
+  
+  # ruta para cargar archivos
+  archivo_temp <- list.files(
+    path = tempdir(),
+    pattern = "\\.csv$|\\.dbf$|\\.dta$|\\.sav$",
+    full.names = TRUE,
+    ignore.case = TRUE
+  )
+  
+  # nombre para la lista
+  nombres <- basename(archivo_temp)
+  
+  nombres <- sub(
+    x = nombres,
+    pattern = "ENOE_",
+    replacement = ""
+  )
+  
+  nombres <- sub(
+    x = nombres,
+    pattern = "\\.csv|\\.dbf|\\.dta|\\.sav",
+    replacement = "",
+    ignore.case = TRUE
+  )
+  
+  # importación según tipo de archivo
+  if (formato == "csv") {
+    enoe <- arrow::read_csv_arrow(archivo_temp)
+  } else if (formato == "dbf") {
+    enoe <- foreign::read.dbf(archivo_temp)
+  } else if (formato == "dta") {
+    enoe <- haven::read_dta(archivo_temp)
+  } else if (formato == "sav") {
+    enoe <- haven::read_sav(archivo_temp)
+  }
+  
+  # eliminación de archivos descargados y extraídos
+  archivo_temp <- list.files(
+    path = tempdir(),
+    pattern = "\\.zip$|\\.csv$|\\.dbf$|\\.dta$|\\.sav$",
+    full.names = TRUE,
+    ignore.case = TRUE
+  )
+  
+  unlink(archivo_temp)
+  
+  return(enoe)
+}
+```
+
+Ahora sí se ejecuta
+
+```{r}
+year_inicio <- 2005
+year_final <- 2025
+
+while (year_inicio <= year_final) {
+  assign(
+    x = paste("enoe_", year_inicio, "t3", sep = ""),
+    value = descargar_modulo(year_inicio, 3),
+    envir = .GlobalEnv
+  )
+
+  year_inicio <- year_inicio + 5 
+}
+
+# list.files(tempdir(), pattern = "csv|zip", full.names = TRUE)
+```
+
+Listo!
+
+Ahora se intentará exportarlos a formato parquet 
+
+```{r}
+# objects(pattern = "enoe_t|enoe ")
+# remove(list = objects(pattern = "enoe_t|enoe "))
+```
+
+Se guardarán en el directorio del proyecto actual, se valida si existe carpeta `datos`
+
+```{r}
+dir.exists(file.path(here::here(), "datos"))
+```
+
+Se crea carpeta
+
+```{r}
+dir.create(file.path(here::here(), "datos"))
+dir.exists(file.path(here::here(), "datos"))
+```
+
+Ahora se almacena la ruta para guardar los archivos
+
+```{r}
+file.path(here::here(), "datos")
+ruta <- file.path(here::here(), "datos")
+```
+
+Se añaden los nombre de los objetos creados
+
+```{r}
+objetos <- objects(pattern = "enoe_") 
+paste(file.path(ruta, objetos), ".parquet", sep = "")
+ruta <- paste(file.path(ruta, objetos), ".parquet", sep = "")
+```
+
+Ahora se exportan a formato parquet
+
+```{r}
+get(objetos[[1]])
+grepv(objetos[[1]], ruta)
+
+write_parquet(
+  x = get(objetos[[1]]),
+  sink = grepv(objetos[[1]], ruta)
+)
+```
+
+De forma iterativa
+
+```{r}
+tamanio <- length(ruta)
+i <- vector("integer", tamanio)
+
+for (i in 1:tamanio) {
+  write_parquet(
+    x = get(objetos[[i]]),
+    sink = grepv(objetos[[i]], ruta)
+  )
+}
+```
+
+Se valida
+
+```{r}
+list.files(file.path(here::here(), "datos"))
+```
+
+Listo! 
+
+Ahora se carga conjunto de datos
+
+```{r}
+# ruta
+dataset <- open_dataset(ruta, format = "parquet")
+schema(dataset)
+```
+
+Ahora se estima el total de la población ocupada por periodo y nivel educativo
+
+```{{r}}
+dataset |> 
+  filter(clase2 == 1) |> 
+  mutate(periodo = add_filename()) |> 
+  compute() |> 
+  group_by(periodo, cs_p13_1) |> 
+  summarise(tot = sum(fac_tri)) |> 
+  collect()
+  
+```
+
+Me arroja error
+
+```{{r}}
+open_dataset(ruta, format = "parquet", unify_schemas = TRUE)
+```
+
+
+Vamos a cargar solamente el periodo 2020-2025
+
+```{r}
+grepv("202", ruta)
+ruta2 <- grepv("202", ruta)
+ruta2
+```
+
+Cargamos el conjunto de datos
+
+```{r}
+dataset <- open_dataset(ruta2, format = "parquet")
+# dataset
+schema(dataset)
+```
+
+Se valida
+
+```{r}
+dataset |> 
+  filter(r_def == 0 & (c_res == 1 | c_res == 3) & eda7c != 0) |> 
+  filter(clase2 == 1) |> 
+  mutate(periodo = add_filename()) |> 
+  compute() |> 
+  group_by(periodo, cs_p13_1) |> 
+  summarise(tot = sum(fac_tri)) |> 
+  collect()
+```
+
+Se presenta un error para el periodo 2005-2015
+
+```{{r}}
+grepv("200|201", ruta)
+ruta2 <- grepv("200|201", ruta)
+
+dataset <- open_dataset(ruta2, format = "parquet")
+# dataset
+schema(dataset)
+
+dataset |> 
+  # filter(r_def == 0 & (c_res == 1 | c_res == 3) & eda7c != 0) |> 
+  # filter(clase2 == 1) |> 
+  mutate(periodo = add_filename()) |> 
+  compute() |> 
+  group_by(periodo, cs_p13_1) |> 
+  summarise(tot = sum(fac)) |> 
+  collect()
+```
+
+Error
+
+```
+Error in `compute()`:
+! Invalid: Invalid UTF8 payload
+Run `rlang::last_trace()` to see where the error occurred.
+```
+
+¿Por qué? Se valida con IA
+
+De acuerdo a la IA es un tema de codificación! Otra vez
+
+Se hace uno por uno
+
+2005
+
+```{r}
+grepv("2005", ruta)
+ruta2 <- grepv("2005", ruta)
+
+dataset <- open_dataset(ruta2, format = "parquet")
+# dataset
+schema(dataset)
+```
+
+Transformación
+
+```{r}
+dataset |> 
+  filter(r_def == 0 & (c_res == 1 | c_res == 3) & eda7c != 0) |>
+  filter(clase2 == 1) |>
+  mutate(periodo = add_filename()) |> 
+  compute() |> 
+  group_by(periodo, cs_p13_1) |> 
+  summarise(tot = sum(fac)) |> 
+  collect()
+```
+
+Listo! 
+
+2010
+
+```{r}
+archivo <- grepv("2010", ruta)
+ruta2 <- archivo
+
+dataset <- open_dataset(ruta2, format = "parquet")
+# dataset
+schema(dataset)
+
+dataset |> 
+  filter(r_def == 0 & (c_res == 1 | c_res == 3) & eda7c != 0) |>
+  filter(clase2 == 1) |>
+  mutate(periodo = add_filename()) |> 
+  compute() |> 
+  group_by(periodo, cs_p13_1) |> 
+  summarise(tot = sum(fac)) |> 
+  collect()
+```
+
+2015
+
+```{r}
+archivo <- grepv("2015", ruta)
+ruta2 <- archivo
+
+dataset <- open_dataset(ruta2, format = "parquet")
+# dataset
+schema(dataset)
+
+dataset |> 
+  filter(r_def == 0 & (c_res == 1 | c_res == 3) & eda7c != 0) |>
+  filter(clase2 == 1) |>
+  mutate(periodo = add_filename()) |> 
+  compute() |> 
+  group_by(periodo, cs_p13_1) |> 
+  summarise(tot = sum(fac)) |> 
+  collect()
+```
+
+Listo!
+
+De forma iterativa
+
+Periodo 2005-2015
+
+```{r}
+year_inicio <- 2005
+year_final <- 2015
+ruta <- list.files(here::here("datos"), pattern = "\\.parquet$", full.names = TRUE)
+
+while (year_inicio <= year_final) {
+  archivo <- grepv(year_inicio, ruta)
+  
+  dataset <- open_dataset(archivo, format = "parquet")
+  
+  datos_proc <- dataset |> 
+    # criterio general
+    filter(r_def == 0 & (c_res == 1 | c_res == 3) & eda7c != 0) |>
+    # población ocupada
+    filter(clase2 == 1) |>
+    mutate(periodo = add_filename()) |> 
+    compute() |> 
+    group_by(periodo, cs_p13_1) |> 
+    summarise(tot = sum(fac)) |> 
+    collect() |> 
+    ungroup()
+  
+  assign(
+    x = paste("datos_proc", year_inicio, sep = "_"),
+    value = datos_proc,
+    envir = .GlobalEnv
+  )
+  
+  year_inicio <- year_inicio + 5
+}
+```
+
+Periodo 2020-2025
+
+```{r}
+ruta <- list.files(here::here("datos"), pattern = "\\.parquet$", full.names = TRUE)
+archivo <- grepv("202", ruta)
+
+dataset <- open_dataset(archivo, format = "parquet")
+  
+datos_proc_2020_2025 <-  dataset |> 
+  # criterio general
+  filter(r_def == 0 & (c_res == 1 | c_res == 3) & eda7c != 0) |>
+  # población ocupada
+  filter(clase2 == 1) |>
+  mutate(periodo = add_filename()) |> 
+  compute() |> 
+  group_by(periodo, cs_p13_1) |> 
+  summarise(tot = sum(fac_tri)) |> 
+  collect() |> 
+  ungroup() 
+```
+
+Ahora se unen 
+
+```{r}
+datos_proc_2005 |> 
+  add_row(datos_proc_2010) |> 
+  add_row(datos_proc_2015) |> 
+  add_row(datos_proc_2020_2025)
+
+datos_proc <- datos_proc_2005 |> 
+  add_row(datos_proc_2010) |> 
+  add_row(datos_proc_2015) |> 
+  add_row(datos_proc_2020_2025)
+```
+
+Listo!
+
+Ahora se extrae el periodo
+
+```{r}
+datos_proc |> 
+  mutate(
+    periodo = str_extract(periodo, "20\\d{2}"),
+    periodo = as.integer(periodo),
+    cs_p13_1 = as.integer(cs_p13_1)
+  ) |> 
+  arrange(cs_p13_1, periodo)
+```
+
+Y a partir de ahí se puede calcular la tasa de variación
+
+```{r}
+datos_proc |> 
+  mutate(
+    periodo = str_extract(periodo, "20\\d{2}"),
+    periodo = as.integer(periodo),
+    cs_p13_1 = as.integer(cs_p13_1)
+  ) |> 
+  arrange(cs_p13_1, periodo) |> 
+  group_by(cs_p13_1) |> 
+  mutate(var = tot / lag(tot) - 1) |> 
+  ungroup()
+```
+
+Por último, se le agrega tipo educativo
+
+```{r}
+datos_proc |> 
+  mutate(
+    periodo = str_extract(periodo, "20\\d{2}"),
+    periodo = as.integer(periodo),
+    cs_p13_1 = as.integer(cs_p13_1)
+  ) |> 
+  arrange(cs_p13_1, periodo) |> 
+  group_by(cs_p13_1) |> 
+  mutate(var = tot / lag(tot) - 1) |> 
+  ungroup() |> 
+  mutate(
+    edu_tipo = case_when(
+      # menor a básica
+      between(cs_p13_1, 0, 1) ~ 0,
+      # básica
+      between(cs_p13_1, 2, 3) ~ 1,
+      # media superior
+      cs_p13_1 == 4 ~ 2,
+      # superior
+      between(cs_p13_1, 5, 9) ~ 3,
+      TRUE ~ NA
+    )
+  )
+```
+
+Listo! Se asigna al objeto correspondiente
+
+```{r}
+variacion_anual <- datos_proc |> 
+  mutate(
+    periodo = str_extract(periodo, "20\\d{2}"),
+    periodo = as.integer(periodo),
+    cs_p13_1 = as.integer(cs_p13_1)
+  ) |> 
+  arrange(cs_p13_1, periodo) |> 
+  group_by(cs_p13_1) |> 
+  mutate(var = tot / lag(tot) - 1) |> 
+  ungroup()
+  # mutate(
+  #   edu_tipo = case_when(
+  #     # menor a básica
+  #     between(cs_p13_1, 0, 1) ~ 0,
+  #     # básica
+  #     between(cs_p13_1, 2, 3) ~ 1,
+  #     # media superior
+  #     cs_p13_1 == 4 ~ 2,
+  #     # superior
+  #     between(cs_p13_1, 5, 9) ~ 3,
+  #     TRUE ~ NA
+  #   )
+  # )
+```
+
+Falta el porcentaje por periodo
+
+```{r}
+datos_proc |> 
+  mutate(
+    periodo = str_extract(periodo, "20\\d{2}"),
+    periodo = as.integer(periodo),
+    cs_p13_1 = as.integer(cs_p13_1)
+  ) |> 
+  group_by(periodo) |> 
+  mutate(prop = tot / sum(tot)) |> 
+  ungroup()
+```
+
+Se guarda objeto
+
+```{r}
+prop_anual <- datos_proc |> 
+  mutate(
+    periodo = str_extract(periodo, "20\\d{2}"),
+    periodo = as.integer(periodo),
+    cs_p13_1 = as.integer(cs_p13_1)
+  ) |> 
+  group_by(periodo) |> 
+  mutate(prop = tot / sum(tot)) |> 
+  ungroup()
+```
+
+Se realizan gráficas
+
+1. Porcentaje anual
+
+```{r}
+prop_anual |> 
+  mutate(educacion = as.character(cs_p13_1)) |> 
+  filter(periodo == 2005 | periodo == 2025) |> 
+  ggplot(aes(periodo, prop, fill = educacion)) + 
+  geom_col()
+```
+
+Son muchos valores, me quedo con los tipos de educación
+
+```{r}
+variacion_anual <- datos_proc |> 
+  mutate(
+    periodo = str_extract(periodo, "20\\d{2}"),
+    periodo = as.integer(periodo),
+    cs_p13_1 = as.integer(cs_p13_1),
+    edu_tipo = case_when(
+      # menor a básica
+      between(cs_p13_1, 0, 1) ~ 0,
+      # básica
+      between(cs_p13_1, 2, 3) ~ 1,
+      # media superior
+      cs_p13_1 == 4 ~ 2,
+      # superior
+      between(cs_p13_1, 5, 9) ~ 3,
+      TRUE ~ NA
+    )
+  ) |> 
+  group_by(periodo, edu_tipo) |> 
+  summarise(tot = sum(tot)) |> 
+  ungroup() |> 
+  arrange(edu_tipo, periodo) |>
+  group_by(edu_tipo) |>
+  mutate(var = tot / lag(tot) - 1) |>
+  ungroup()
+```
+
+```{r}
+prop_anual <- datos_proc |> 
+  mutate(
+    periodo = str_extract(periodo, "20\\d{2}"),
+    periodo = as.integer(periodo),
+    cs_p13_1 = as.integer(cs_p13_1),
+    edu_tipo = case_when(
+      # menor a básica
+      between(cs_p13_1, 0, 1) ~ 0,
+      # básica
+      between(cs_p13_1, 2, 3) ~ 1,
+      # media superior
+      cs_p13_1 == 4 ~ 2,
+      # superior
+      between(cs_p13_1, 5, 9) ~ 3,
+      TRUE ~ NA
+    )
+  ) |> 
+  group_by(periodo, edu_tipo) |> 
+  summarise(tot = sum(tot)) |> 
+  mutate(prop = tot / sum(tot)) |> 
+  ungroup()
+```
+
+Se vuelve a realizar gráfica
+
+```{r}
+prop_anual |> 
+  mutate(
+    educacion = as.character(edu_tipo),
+    periodo = as.character(periodo)
+  ) |> 
+  filter(periodo == 2005 | periodo == 2025) |> 
+  ggplot(aes(periodo, prop, fill = educacion)) + 
+  geom_col()
+```
+
+Variación anual
+
+```{r}
+variacion_anual |> 
+  filter(!is.na(edu_tipo)) |> 
+  mutate(
+    educacion = as.character(edu_tipo),
+    # periodo = as.character(periodo)
+  ) |> 
+  ggplot(aes(periodo, var, color = educacion, linetype = educacion)) + 
+  geom_point() + 
+  geom_line()
+```
+
+Variación
+
+2005-2025
+
+```{r}
+# library(scales)
+
+datos_proc |> 
+  mutate(
+    periodo = str_extract(periodo, "20\\d{2}"),
+    periodo = as.integer(periodo),
+    cs_p13_1 = as.integer(cs_p13_1)
+  ) |> 
+  filter(periodo == 2005 | periodo == 2025) |> 
+  arrange(cs_p13_1, periodo) |> 
+  group_by(cs_p13_1) |>
+  mutate(
+    var = tot / lag(tot) - 1,
+    var = percent(var)
+    # tot = scales::number(tot, big.mark = TRUE)
+  ) |> 
+  ungroup()
+```
+
