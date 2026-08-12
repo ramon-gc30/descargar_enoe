@@ -1,0 +1,610 @@
+---
+date: "10-08-2026"
+format: gfm
+---
+
+Se continua con la aplicación de las funciones creadas en este repositorio. Anteriormente, en `bitacora/aplicacion_porcentaje_pob_ocu_por_edu_2005-2025.qmd`, se analizó la población ocupada por nivel educativo para el periodo 2005-2025, de forma quinquenal. Se seguirá con dicho ejemplo, pero con la versión más reciente (v5.1) de la función `descargar_modulo`.
+
+```{r}
+#| label: setup
+#| warning: false
+#| message: false
+
+library(tidyverse)
+library(here)
+library(arrow)
+library(scales)
+library(RColorBrewer)
+
+source(here::here("scripts", "0_funciones.R"))
+```
+
+Se extrae el módulo SDEM correspondiente al tercer trimestre del periodo 2005-2025 de forma quinquenal. Recordemos que cuando se especifica el formato parquet dentro de la función `descargar_modulo`, devuelve una tabla tipo Arrow, es decir, la ruta de uno o varios archivos donde se realizarán las instrucciones. Por tanto, puede crearse $n$ objetos o solamente uno solo, al final de cuentas, dicha función creará los $n$ archivos parquet. 
+
+Así pues,
+
+```{r}
+year_inicio <- 2005
+year_final <- 2025
+
+while (year_inicio <= year_final) {
+  sdem <- descargar_modulo(year_inicio, 3, "sdem", "parquet")
+
+  year_inicio <- year_inicio + 5 
+}
+```
+
+Se valida
+
+```{r}
+# sdem$files
+# dirname(sdem$files)
+list.files(dirname(sdem$files), "\\.parquet$", full.names = TRUE)
+```
+
+Se crea objeto que contiene dichos archivos para cargar el conjunto de datos que incluya todos los archivos
+
+```{r}
+archivo_parquet <- list.files(dirname(sdem$files), "\\.parquet$", full.names = TRUE)
+```
+
+Se carga conjunto de datos
+
+```{r}
+sdem <- open_dataset(archivo_parquet, format = "parquet")
+```
+
+Se valida
+
+```{r}
+schema(sdem)
+```
+
+Se observa que solamente carga las columnas del primer archivo especificado en `sources`. No obstante, de acuerdo a los metadatos del INEGI, hay dos variables que muestran la ponderación de la muestra trimestral:
+
+* `fac`: 2005-2020T1
+* `fac_tri`: 2020T2-actualidad
+
+Por tanto, debe separarse dichos archivos o unificarse. Se intenta lo segundo.
+
+```{r}
+sdem <- open_dataset(archivo_parquet, format = "parquet", unify_schemas = TRUE) 
+
+schema(sdem)
+```
+
+Se observa que ahora sí aparece `fac` y `fac_tri`. Se realiza una consulta sencilla
+
+```{r}
+sdem |> 
+  mutate(file = arrow::add_filename()) |> 
+  compute() |> 
+  count(file) |> 
+  collect()
+```
+
+Ahora con el ponderador
+
+```{r}
+sdem |> 
+  # filter(!is.na(fac_tri)) |> 
+  mutate(file = arrow::add_filename()) |> 
+  compute() |>
+  mutate(fac_tri = as.double(fac_tri)) |> 
+  group_by(file) |> 
+  summarise(tot = sum(fac_tri)) |> 
+  collect()
+```
+
+Con el campo `fac`
+
+```{r}
+sdem |> 
+  mutate(file = arrow::add_filename()) |> 
+  compute() |>
+  mutate(fac = as.double(fac)) |> 
+  group_by(file) |> 
+  summarise(tot = sum(fac)) |> 
+  collect()
+```
+
+Sí es posible!!!
+
+Puede unirse en un solo campo?
+
+```{r}
+sdem |> 
+  mutate(file = add_filename()) |> 
+  compute() |> 
+  mutate(
+    ponderador = if_else(!is.na(fac) & !is.na(fac_tri), str_c(fac, fac_tri), NA),
+    ponderador = as.double(ponderador)
+  ) |> 
+  group_by(file) |> 
+  summarise(tot = sum(ponderador)) |> 
+  collect()
+```
+
+No arroja el resultado esperado y con `case_when` arroja error. Mejor filtrar por valores
+
+```{r}
+# df
+
+df |> 
+  filter(str_detect(file, "T32"))
+
+df |> 
+  filter(str_detect(file, "T32", negate = TRUE))
+```
+
+En el caso de `fac`
+
+```{r}
+sdem |> 
+  mutate(file = arrow::add_filename()) |> 
+  compute() |>
+  filter(str_detect(file, "T32", negate = TRUE)) |> 
+  mutate(fac = as.double(fac)) |> 
+  group_by(file) |> 
+  summarise(tot = sum(fac)) |> 
+  collect()
+```
+
+Y en cuanto a `fac_tri`
+
+```{r}
+sdem |> 
+  mutate(file = arrow::add_filename()) |> 
+  compute() |>
+  filter(str_detect(file, "T32")) |> 
+  mutate(fac = as.double(fac_tri)) |> 
+  group_by(file) |> 
+  summarise(tot = sum(fac)) |> 
+  collect()
+```
+
+Filtar por valores faltantes
+
+```{r}
+sdem |> 
+  filter(!is.na(fac_tri)) |> 
+  mutate(file = arrow::add_filename()) |> 
+  compute() |>
+  # filter(str_detect(file, "T32")) |> 
+  mutate(fac = as.double(fac_tri)) |> 
+  group_by(file) |> 
+  summarise(tot = sum(fac)) |> 
+  collect()
+```
+
+¿Cuál tarda menos?
+
+```{r}
+sdem |> 
+  mutate(file = arrow::add_filename()) |> 
+  compute() |>
+  filter(str_detect(file, "T32")) |> 
+  mutate(fac = as.double(fac_tri)) |> 
+  group_by(file) |> 
+  summarise(tot = sum(fac)) |> 
+  collect() |> 
+  system.time()
+```
+
+```{r}
+sdem |> 
+  filter(!is.na(fac_tri)) |> 
+  mutate(file = arrow::add_filename()) |> 
+  compute() |>
+  # filter(str_detect(file, "T32")) |> 
+  mutate(fac = as.double(fac_tri)) |> 
+  group_by(file) |> 
+  summarise(tot = sum(fac)) |> 
+  collect() |> 
+  system.time()
+```
+
+Último intento
+
+```{{r}}
+sdem |> 
+  mutate(
+    ponderador = case_when(
+      !is.na(fac) ~ fac,
+      !is.na(fac_tri) ~ fac_tri,
+      TRUE ~ NA
+    ),
+    file = arrow::add_filename()
+  ) |> 
+  compute() |>
+  mutate(ponderador = as.double(ponderador)) |> 
+  group_by(file) |> 
+  summarise(tot = sum(ponderador)) |> 
+  collect()
+```
+
+Otro
+
+```{r}
+sdem |> 
+  mutate(
+    ponderador = if_else(!is.na(fac), fac, fac_tri), 
+    file = arrow::add_filename()
+  ) |> 
+  compute() |>
+  mutate(ponderador = as.double(ponderador)) |> 
+  group_by(file) |> 
+  summarise(tot = sum(ponderador)) |> 
+  collect()
+```
+
+Sí!!!
+
+Se valida tiempo de ejecución
+
+```{r}
+sdem |> 
+  mutate(
+    ponderador = if_else(!is.na(fac), fac, fac_tri), 
+    file = arrow::add_filename()
+  ) |> 
+  compute() |>
+  mutate(ponderador = as.double(ponderador)) |> 
+  group_by(file) |> 
+  summarise(tot = sum(ponderador)) |> 
+  collect() |> 
+  system.time()
+```
+
+Si lo cambio
+
+```{r}
+sdem |> 
+  mutate(
+    file = arrow::add_filename()
+  ) |> 
+  compute() |>
+  mutate(
+    ponderador = if_else(!is.na(fac), fac, fac_tri), 
+    ponderador = as.double(ponderador)
+  ) |> 
+  group_by(file) |> 
+  summarise(tot = sum(ponderador)) |> 
+  collect() |> 
+  system.time()
+```
+
+```{r}
+sdem |> 
+  mutate(
+    ponderador = if_else(!is.na(fac), fac, fac_tri), 
+    ponderador = as.double(ponderador),
+    file = arrow::add_filename()
+  ) |> 
+  compute() |>
+  group_by(file) |> 
+  summarise(tot = sum(ponderador)) |> 
+  collect() |> 
+  system.time()
+```
+
+Por último
+
+```{r}
+df |> 
+  mutate(
+    file = basename(file),
+    file = str_replace(file, "ENOE_|ENOEN_", "")
+  )
+```
+
+Así,
+
+```{r}
+sdem |> 
+  filter(r_def == "0" & (c_res == "1" | c_res == "3") & eda7c != "0") |>
+  filter(clase2 == "1") |>
+  mutate(
+    ponderador = if_else(!is.na(fac), fac, fac_tri), 
+    ponderador = as.double(ponderador),
+    file = arrow::add_filename()
+  ) |> 
+  compute() |>
+  group_by(file, cs_p13_1) |> 
+  summarise(tot = sum(ponderador)) |> 
+  ungroup() |> 
+  collect()
+```
+
+Se continua con el procedimiento 
+
+```{r}
+archivo_parquet <- list.files(file.path(here::here(), "ENOE"), "\\.parquet", full.names = TRUE)
+
+datos <- open_dataset(archivo_parquet, format = "parquet", unify_schemas = TRUE)
+```
+
+Se requiere el total de la población ocupada por nivel educativo por periodo
+
+```{r}
+datos_proc <- datos |>
+  # criterio general
+  filter(r_def == "0" & (c_res == "1" | c_res == "3") & eda7c != "0") |>
+  # población ocupada
+  filter(clase2 == "1") |>
+  # de 2005 a 2015 es fac y de 2020 a 2025 es fac_tri, se unifica
+  mutate(
+    ponderador = if_else(!is.na(fac), fac, fac_tri), 
+    ponderador = as.double(ponderador),
+    file = arrow::add_filename()
+  ) |> 
+  compute() |>
+  group_by(file, cs_p13_1) |> 
+  summarise(tot = sum(ponderador)) |> 
+  ungroup() |> 
+  collect()
+```
+
+Se valida
+
+```{r}
+datos_proc
+```
+
+Se limpia la tabla obtenida
+
+Obtener el periodo
+
+```{r}
+datos_proc |> 
+  mutate(
+    # file = basename(file),
+    periodo = str_c("20", str_extract(file, "05|1\\d{1}|2\\d{1}"))
+  ) |> 
+  select(file, periodo)
+```
+
+Se crean tablas que contienen la descripción de cada campo
+
+```{r}
+nivel_edu_label <- tribble(
+  ~cs_p13_1, ~nivel_edu_label,
+  0, "Ninguna", 
+  1, "Preescolar", 
+  2, "Primaria", 
+  3, "Secundaria", 
+  4, "Preparatoria o bachillerato", 
+  5, "Normal", 
+  6, "Carrera técnica", 
+  7, "Profesional", 
+  8, "Maestría", 
+  9, "Doctorado", 
+  # 99, "No sabe"
+  99, NA
+)
+
+nivel_tipo_edu <- tribble(
+  ~cs_p13_1, ~tipo_edu, ~tipo_edu_label,
+  0, 0, "Menor a básica", 
+  1, 0, "Menor a básica", 
+  2, 1, "Básica", 
+  3, 1, "Básica", 
+  4, 2, "Media superior", 
+  5, 3, "Superior", 
+  6, 3, "Superior", 
+  7, 3, "Superior", 
+  8, 3, "Superior", 
+  9, 3, "Superior", 
+  # 99, NA, "No identificado",
+  99, NA, NA
+)
+
+tipo_edu_label <- nivel_tipo_edu |> 
+  distinct(tipo_edu, tipo_edu_label)
+```
+
+Se unen
+
+```{r}
+datos_proc |> 
+  mutate(cs_p13_1 = as.double(cs_p13_1)) |> 
+  left_join(nivel_edu_label, by = "cs_p13_1") |> 
+  left_join(nivel_tipo_edu, by = "cs_p13_1")
+```
+
+Ambos procedimientos
+
+```{r}
+datos_proc <- datos_proc |> 
+  mutate(
+    file = str_c("20", str_extract(file, "05|1\\d{1}|2\\d{1}")),
+    cs_p13_1 = as.double(cs_p13_1)
+  ) |> 
+  left_join(nivel_edu_label, by = "cs_p13_1") |> 
+  left_join(nivel_tipo_edu, by = "cs_p13_1") |> 
+  arrange(desc(file), cs_p13_1)
+
+datos_proc
+```
+
+Se crean dos gráficas
+
+1. Porcentaje de la población ocupada por tipo educativo del total
+2. Variación de la población ocupada por nivel educativo
+
+En cuanto al 1ero: se vuelve a sumar
+
+```{r}
+prop_tot <- datos_proc |> 
+  group_by(file, tipo_edu) |> 
+  summarise(tot = sum(tot)) |> 
+  mutate(prop = tot / sum(tot)) |> 
+  ungroup() |> 
+  left_join(tipo_edu_label, by = "tipo_edu")
+
+prop_tot
+```
+
+Con respecto al segundo:
+
+```{r}
+var_tot <- datos_proc |> 
+  arrange(cs_p13_1, file) |> 
+  group_by(cs_p13_1) |> 
+  mutate(var = tot / lag(tot) - 1) |> 
+  ungroup()
+
+var_tot
+```
+
+Se realiza gráfica
+
+```{{r}}
+df <- edu_tipo_label |> 
+  distinct(tipo_educacion, descripcion)
+
+df_valor <- df$tipo_educacion
+df_nombre <- df$descripcion
+
+df <- setNames(df_nombre, df_valor)
+
+df
+```
+
+
+```{r}
+# library(scales)
+# library(RColorBrewer)
+
+prop_tot |> 
+  mutate(
+    prop_label = if_else(prop > 0.01, percent(prop, accuracy = 1), ""),
+    tipo_edu = as.character(tipo_edu)
+  ) |> 
+  ggplot(aes(file, prop, fill = tipo_edu_label, group = file)) + 
+  geom_col() +
+  geom_text(aes(label = prop_label), position = position_stack(vjust = 0.5)) + 
+  scale_x_discrete(name = NULL) +
+  scale_y_continuous(name = NULL, breaks = NULL, expand = 0) + 
+  scale_fill_brewer(
+    name = "Educación",
+    # labels = tipo_edu_label,
+    palette = "Paired",
+    # type = "qual",
+    # guide = "legend"
+    # na.translate = TRUE,
+    na.value = "gray"
+  ) + 
+  theme_classic(base_size = 12, base_family = "Times New Roman") + 
+  theme(
+    axis.line = element_blank(),
+    axis.ticks = element_blank(),
+  )
+```
+
+En el caso de variación
+
+```{r}
+# var_tot
+
+var_tot |> 
+  filter(!is.na(var) & cs_p13_1 != 99) |> 
+  mutate(
+    file = as.integer(file),
+    cs_p13_1 = as.character(cs_p13_1)
+  ) |> 
+  ggplot(aes(file, var, linetype = cs_p13_1)) + 
+  geom_point() + 
+  geom_line()
+```
+
+Se ve horrible. Además especificando las etiquetas directamente del tibble las reordena de A-Z, no en el orden de los valores.
+
+Por eso, se pasará a tipo de educación
+
+```{r}
+var_tot <- datos_proc |> 
+  group_by(file, tipo_edu) |> 
+  summarise(tot = sum(tot)) |> 
+  ungroup() |>
+  arrange(tipo_edu, file) |> 
+  group_by(tipo_edu) |> 
+  mutate(var = tot / lag(tot) - 1) |> 
+  ungroup()
+
+var_tot
+
+# var_tot |> 
+#   left_join(tipo_edu_label, by = "tipo_edu")
+# 
+# tipo_edu_label$tipo_edu
+# tipo_edu_label$tipo_edu_label
+
+etiqueta <- setNames(
+  object = tipo_edu_label$tipo_edu_label,
+  nm = tipo_edu_label$tipo_edu
+)
+
+```
+
+Gráfica
+
+```{r}
+var_tot |> 
+  filter(!is.na(tipo_edu)) |>
+  mutate(
+    file = as.integer(file),
+    educacion = as.character(tipo_edu)
+  ) |> 
+  ggplot(aes(file, var, color = educacion, linetype = educacion)) + 
+  geom_point(size = 2.5) + 
+  geom_line(linewidth = 0.75) + 
+  geom_hline(yintercept = 0, linetype = 3, linewidth = 0.25) +
+  scale_y_continuous(
+    breaks = breaks_width(0.1),
+    labels = label_percent(accuracy = 1)
+  ) + 
+  scale_color_brewer(
+    name = "Educación",
+    labels = etiqueta,
+    palette = "Set1"
+  ) +
+  scale_linetype_discrete(
+    name = "Educación",
+    labels = etiqueta
+    # palette = "Paired"
+  ) + 
+  theme_classic(base_size = 12, base_family = "Times New Roman") + 
+  theme(
+    axis.title = element_blank()
+  )
+```
+
+Por último, se calcula tasa de variación promedio. La fórmula es:
+
+$$
+TVP = \sqrt[n]{\frac{Vt}{Vo}} - 1 * 100
+$$
+
+Fuente. Notas de clase Economía y negocios (p. 20), véase archivo "1-Instrumentales para economía".
+
+```{r}
+datos_proc |> 
+  arrange(cs_p13_1)
+
+datos_proc |> 
+  arrange(cs_p13_1) |> 
+  mutate(file = as.integer(file)) |>
+  group_by(cs_p13_1) |>
+  summarise(
+    vt = first(tot),
+    vo = last(tot),
+    n = max(file) - min(file),
+    tvp = ((vt / vo)**(1/n)) - 1
+  )
+```
+
+```{r}
+(1575727 / 2793058)**(1/20) - 1
+```
+
