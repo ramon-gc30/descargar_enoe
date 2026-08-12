@@ -41,7 +41,7 @@ en formato parquet y se cargarán en R como objetos `dataset` de Arrow.
 Recordemos que las funciones `descargar_modulo` y `descargar_enoe`
 cuando se especifica `formato = "parquet"` devuelven un objeto tipo
 `dataset` de Arrow, almacenando el o los archivos parquet en la carpeta
-`ENOE` dentro del directorio actual de trabajo.
+`datos` dentro del directorio actual de trabajo.
 
 Así pues, podríamos ejecutar la función de esta manera:
 
@@ -76,10 +76,10 @@ quinquenal, empezando por el año 2005. La función `descargar_modulo`
 primero descarga el archivo del periodo correspondiente, después extrae
 la tabla especificada, lo carga en R como tibble (mediante `read_csv`) y
 posteriormente lo almacena en el directorio actual de trabajo en la
-subcarpeta `ENOE`.
+subcarpeta `datos`.
 
 ``` r
-archivo_parquet <- list.files(file.path(here::here(), "ENOE"), "\\.parquet", full.names = TRUE)
+archivo_parquet <- list.files(file.path(here::here(), "datos"), "\\.parquet", full.names = TRUE)
 
 tibble(
   file = basename(archivo_parquet),
