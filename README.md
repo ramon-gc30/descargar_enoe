@@ -4,7 +4,7 @@ Ramón Carrillo
 
 # Introducción
 
-Este repositorio consiste en descargar los microdatos de la ENOE
+Este repositorio consiste en extraer los microdatos de la ENOE
 directamente del repositorio del INEGI, es decir, sin la necesidad de
 ingresar el enlace.
 
@@ -16,7 +16,7 @@ if (require(pacman) == FALSE) {
   library(pacman)
 } 
 
-pacman::p_load(tidyverse, here, importinegi, foreign, haven)
+pacman::p_load(tidyverse, here, importinegi, foreign, haven, arrow)
 source(here::here("scripts", "0_funciones.R"))
 ```
 
@@ -34,20 +34,22 @@ descargar_modulo(year, trimestre, modulo = "sdem", formato = "csv")
 ````
 
 - `descargar_enoe(year, trimestre, formato)`: obtiene los microdatos de
-  TODOS los módulos (o tablas), devuelve una lista donde cada elemento
-  contiene cada módulo de la ENOE,
+  TODOS los módulos (o tablas) del periodo especificado, devuelve una
+  lista donde cada elemento contiene cada módulo de la ENOE o un objeto
+  tipo `dataset` de Arrow si se especifico el formato parquet.
 
 - `descargar_modulo(year, trimestre, modulo, formato)`: obtiene los
   microdatos de un módulo y devuelve ya sea un tibble (si se
-  especificaron los formatos CSV, STA, SAV) o un data frame (en el caso
-  de DBF).
+  especificaron los formatos CSV, STA, SAV), un data frame (en el caso
+  de DBF), o bien un `dataset` de Arrow si se especifico el formato
+  parquet.
 
 ## Argumentos
 
 - `year`: año de levantamiento de la encuesta (2005 a la actualidad),
 - `trimestre`: trimestre de levantamiento (1 a 4),
-- `formato`: formato del archivo a descargar (CSV, DBF, STA, SAV), por
-  defecto en formato CSV,
+- `formato`: formato del archivo a descargar (CSV, DBF, STA, SAV o
+  parquet), por defecto en formato CSV,
 - `modulo`: tabla a seleccionar (INEGI, 2023, pp. 1-2):
   - `hog`: hogar,
   - `viv`: vivienda,
@@ -129,21 +131,45 @@ errores al momento de detectar los distintos tipos de columna.
 ## Ejemplo 2
 
 Se requiere obtener la tabla sociodemográfica de la ENOE correspondiente
-al año 2008 del cuarto trimestre en formato DBF.
+al año 2008 del cuarto trimestre en formato parquet.
 
 ``` r
-sdem <- descargar_modulo(2008, 4, "sdem", "dbf")
+sdem <- descargar_modulo(2008, 4, "sdem", "parquet")
 
-nrow(sdem)
+sdem
 ```
 
-    [1] 407232
+    FileSystemDataset with 1 Parquet file
+    104 columns
+    r_def: string
+    loc: string
+    mun: string
+    est: string
+    est_d: string
+    ageb: string
+    t_loc: string
+    cd_a: string
+    ent: string
+    con: string
+    upm: string
+    d_sem: string
+    n_pro_viv: string
+    v_sel: string
+    n_hog: string
+    h_mud: string
+    n_ent: string
+    per: string
+    n_ren: string
+    c_res: string
+    ...
+    84 more columns
+    Use `schema()` to see entire schema
 
-``` r
-ncol(sdem)
-```
+    See $metadata for additional Schema metadata
 
-    [1] 104
+Cuando se especifica el formato parquet, ambas funciones devuelven un
+objeto tipo `datasets` de Arrow, consulte la sección de Actualizaciones
+para más información.
 
 ## Ejemplo 3
 
@@ -335,6 +361,8 @@ sociodemográfica (`SDEM`), véase INEGI (2023) para más información.
 
 # Actualizaciones
 
+29 de julio de 2026
+
 La versión actual de las funciones `descargar_enoe` y `descargar_modulo`
 (v4.2) superan las limitaciones presentadas en las versiones previas
 donde:
@@ -345,6 +373,27 @@ donde:
   INEGI (además del CSV): DBF, STA, SAV,
 - Algunas pruebas realizadas validan su ejecución incluso en periodos
   lejanos al actual
+
+12 de agosto de 2026
+
+Se incorporó el formato parquet como formato de salida en ambas
+funciones. Primero descargan el archivo del periodo correspondiente,
+después extraen todas las tablas o la tabla especificada, lo carga en R
+como tibble (mediante `read_csv`) y posteriormente lo almacena en el
+directorio actual de trabajo en la subcarpeta `datos`.
+
+De este modo, ambas devuelven un objeto tipo conjunto de datos
+(*datasets*) de Arrow guardando el archivo en la carpeta `datos` dentro
+del directorio actual de trabajo. Cabe mencionar que todas las variables
+(columnas) son de tipo cadena de texto (`string`). Esto es resultado de
+cargar el archivo como tibble con `readr::read_csv`, y no con
+`arrow::read_csv_arrow`, especificando dicho tipo de dato en todas las
+columnas de la tabla o tablas. Se decidió realizarlo de esta manera para
+evitar posibles errores de codificación al momento de ejecutar consultas
+desde el conjunto de datos.
+
+Así, podría agilizarse la manipulación de microdatos de la ENOE entre
+distintos periodos, véase `aplicacion.md` a modo de ejemplo.
 
 # Referencias
 
