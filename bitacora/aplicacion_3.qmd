@@ -1,0 +1,466 @@
+---
+date: "11-08-2026"
+format: gfm
+---
+
+Se continua con lo desarrollado en `bitacora/aplicacion_2.qmd`. A continuación se resumirá el procedimiento desarrollado en dicho documento.
+
+```{r}
+#| label: setup
+#| warning: false
+#| message: false
+
+library(tidyverse)
+library(here)
+library(arrow)
+library(scales)
+library(RColorBrewer)
+
+source(here::here("scripts", "0_funciones.R"))
+```
+
+Proceso de obtención de datos
+
+```{r}
+# year_inicio <- 2005
+# year_final <- 2025
+# 
+# while (year_inicio <= year_final) {
+#   sdem <- descargar_modulo(year_inicio, 3, "sdem", "parquet")
+# 
+#   year_inicio <- year_inicio + 5 
+# }
+
+archivo_parquet <- list.files(file.path(here::here(), "ENOE"), "\\.parquet", full.names = TRUE)
+
+datos <- open_dataset(archivo_parquet, format = "parquet", unify_schemas = TRUE)
+
+datos_proc <- datos |>
+  # criterio general
+  filter(r_def == "0" & (c_res == "1" | c_res == "3") & eda7c != "0") |>
+  # población ocupada
+  filter(clase2 == "1") |>
+  # de 2005 a 2015 es fac y de 2020 a 2025 es fac_tri, se unifica
+  mutate(
+    ponderador = if_else(!is.na(fac), fac, fac_tri), 
+    ponderador = as.double(ponderador),
+    file = arrow::add_filename()
+  ) |> 
+  compute() |>
+  group_by(file, cs_p13_1) |> 
+  summarise(tot = sum(ponderador)) |> 
+  ungroup() |> 
+  collect()
+
+# nivel_edu_label <- tribble(
+#   ~cs_p13_1, ~nivel_edu_label,
+#   0, "Ninguna", 
+#   1, "Preescolar", 
+#   2, "Primaria", 
+#   3, "Secundaria", 
+#   4, "Preparatoria o bachillerato", 
+#   5, "Normal", 
+#   6, "Carrera técnica", 
+#   7, "Profesional", 
+#   8, "Maestría", 
+#   9, "Doctorado", 
+#   # 99, "No sabe"
+#   99, NA
+# )
+
+nivel_tipo_edu <- tribble(
+  ~cs_p13_1, ~tipo_edu, ~tipo_edu_label,
+  0, 0, "Menor a básica", 
+  1, 0, "Menor a básica", 
+  2, 1, "Básica", 
+  3, 1, "Básica", 
+  4, 2, "Media superior", 
+  5, 3, "Superior", 
+  6, 3, "Superior", 
+  7, 3, "Superior", 
+  8, 3, "Superior", 
+  9, 3, "Superior", 
+  99, NA, "No especificado"
+  # 99, NA, NA
+)
+
+tipo_edu_label <- nivel_tipo_edu |> 
+  distinct(tipo_edu, tipo_edu_label)
+
+datos_proc <- datos_proc |> 
+  mutate(
+    file = str_c("20", str_extract(file, "05|1\\d{1}|2\\d{1}")),
+    cs_p13_1 = as.double(cs_p13_1)
+  ) |> 
+  # left_join(nivel_edu_label, by = "cs_p13_1") |> 
+  left_join(nivel_tipo_edu, by = "cs_p13_1") |> 
+  select(-tipo_edu_label)
+
+prop_tot <- datos_proc |> 
+  group_by(file, tipo_edu) |> 
+  summarise(tot = sum(tot)) |> 
+  mutate(prop = tot / sum(tot)) |> 
+  ungroup()
+```
+
+Se valida
+
+```{r}
+prop_tot
+```
+
+Para el caso de la variación
+
+```{r}
+prop_tot |> 
+  arrange(tipo_edu, file) |> 
+  group_by(tipo_edu) |> 
+  mutate(var = tot / lag(tot) - 1) |> 
+  ungroup()
+  
+```
+
+En uno solo
+
+```{r}
+tipo_edu_quin <- datos_proc |> 
+  # extraer periodo
+  mutate(
+    file = str_c("20", str_extract(file, "05|1\\d{1}|2\\d{1}")),
+    cs_p13_1 = as.double(cs_p13_1)
+  ) |> 
+  # left_join(nivel_edu_label, by = "cs_p13_1") |> 
+  # obtener tipo educativo según nivel educativo
+  left_join(nivel_tipo_edu, by = "cs_p13_1") |> 
+  select(-tipo_edu_label) |> 
+  # calcular porcentaje
+  group_by(file, tipo_edu) |> 
+  summarise(tot = sum(tot)) |> 
+  mutate(prop = tot / sum(tot)) |> 
+  ungroup() |> 
+  # calcular tasa de variación quinquenal
+  arrange(tipo_edu, file) |> 
+  group_by(tipo_edu) |> 
+  mutate(var = tot / lag(tot) - 1) |> 
+  ungroup()
+
+tipo_edu_quin
+```
+
+Tasa de variación promedio
+
+$$
+TVP = \sqrt[n]{\frac{Vt}{Vo}} - 1 * 100
+$$
+
+Fuente. Notas de clase Economía y negocios (p. 20), véase archivo "1-Instrumentales para economía".
+
+```{r}
+datos_proc <- datos_proc |> 
+  # extraer periodo
+  mutate(
+    file = str_c("20", str_extract(file, "05|1\\d{1}|2\\d{1}")),
+    cs_p13_1 = as.double(cs_p13_1)
+  ) |> 
+  # left_join(nivel_edu_label, by = "cs_p13_1") |> 
+  # obtener tipo educativo según nivel educativo
+  left_join(nivel_tipo_edu, by = "cs_p13_1") |> 
+  select(-tipo_edu_label)
+
+datos_proc |> 
+  mutate(file = as.integer(file)) |>
+  arrange(cs_p13_1, desc(file))
+
+datos_proc |> 
+  mutate(file = as.integer(file)) |>
+  arrange(cs_p13_1, desc(file)) |> 
+  group_by(cs_p13_1) |>
+  summarise(
+    vt = first(tot),
+    vo = last(tot),
+    n = max(file) - min(file),
+    tvp = ((vt / vo)**(1/n)) - 1
+  )
+
+# datos_proc |> 
+#   mutate(file = as.integer(file)) |>
+#   arrange(tipo_edu, desc(file))
+# 
+# datos_proc |> 
+#   mutate(file = as.integer(file)) |>
+#   arrange(tipo_edu, desc(file)) |> 
+#   group_by(tipo_edu) |>
+#   summarise(
+#     vt = first(tot),
+#     vo = last(tot),
+#     n = max(file) - min(file),
+#     tvp = ((vt / vo)**(1/n)) - 1
+#   )
+```
+
+
+
+Crear etiqueta
+
+```{r}
+# tipo_edu_label$tipo_edu
+# tipo_edu_label$tipo_edu_label
+etiqueta <- setNames(
+  object = tipo_edu_label$tipo_edu_label,
+  nm = tipo_edu_label$tipo_edu
+)
+
+etiqueta
+```
+
+Gráfica 1
+
+```{r}
+fig_prop <- tipo_edu_quin |> 
+  mutate(
+    prop_label = if_else(prop > 0.01, percent(prop, accuracy = 1), ""),
+    tipo_edu = as.character(tipo_edu)
+  ) |> 
+  ggplot(aes(file, prop, fill = tipo_edu, group = file)) + 
+  geom_col() +
+  geom_text(aes(label = prop_label), position = position_stack(vjust = 0.5)) + 
+  scale_x_discrete(name = NULL) +
+  scale_y_continuous(name = NULL, breaks = NULL, expand = 0) + 
+  scale_fill_brewer(
+    name = "Educación",
+    labels = etiqueta,
+    palette = "Paired",
+    na.value = "gray"
+  ) + 
+  theme_classic(base_size = 12, base_family = "Times New Roman") + 
+  theme(
+    axis.line = element_blank(),
+    axis.ticks = element_blank(),
+  )
+
+fig_prop
+```
+
+Gráfica 2
+
+```{r}
+fig_var <- tipo_edu_quin |> 
+  filter(!is.na(tipo_edu)) |>
+  mutate(
+    file = as.integer(file),
+    educacion = as.character(tipo_edu)
+  ) |> 
+  ggplot(aes(file, var, color = educacion, linetype = educacion)) + 
+  geom_point(size = 2.5) + 
+  geom_line(linewidth = 0.75) + 
+  geom_hline(yintercept = 0, linetype = 3, linewidth = 0.25) +
+  scale_y_continuous(
+    breaks = breaks_width(0.1),
+    labels = label_percent(accuracy = 1)
+  ) + 
+  scale_color_brewer(
+    name = "Educación",
+    labels = etiqueta,
+    palette = "Set1"
+  ) +
+  scale_linetype_discrete(
+    name = "Educación",
+    labels = etiqueta
+    # palette = "Paired"
+  ) + 
+  theme_classic(base_size = 12, base_family = "Times New Roman") + 
+  theme(axis.title = element_blank())
+
+fig_var
+```
+
+Se añade título
+
+```{r}
+fig_prop + 
+  labs(
+    # title = "El porcentaje de personas ocupadas con educación superior incrementó 7 pp, mientras que con educación media superior aumentó 11 pp",
+    title = "Porcentaje de personas ocupadas por tipos de educación (formal) ",
+    subtitle = "2005T3-2025T3",
+    caption = "Fuente. Encuesta Nacional de Ocupación y Empleo (ENOE, INEGI) del periodo 2005T3-2025T3."
+  )
+```
+
+En la figura 2
+
+```{r}
+fig_var + 
+  labs(
+    title = "Tasa de variación (quinquenal) de la población ocupada por tipo de educación",
+    subtitle = "2005T3-2025T3",
+    caption = "Fuente. Encuesta Nacional de Ocupación y Empleo (ENOE, INEGI) del periodo 2005T3-2025T3."
+  )
+```
+
+Gráfica 3
+
+```{r}
+nivel_edu_tvap <-  datos_proc |> 
+  mutate(file = as.integer(file)) |>
+  arrange(cs_p13_1, desc(file)) |> 
+  group_by(cs_p13_1) |>
+  summarise(
+    vt = first(tot),
+    vo = last(tot),
+    n = max(file) - min(file),
+    tvp = ((vt / vo)**(1/n)) - 1
+  )
+
+nivel_edu_tvap
+```
+
+Se crea figura
+
+```{r}
+# nivel_edu_label$nivel_edu_label
+# nivel_edu_label$cs_p13_1
+
+etiqueta <- setNames(
+  object = nivel_edu_label$nivel_edu_label,
+  nm = nivel_edu_label$cs_p13_1
+)
+
+nivel_edu_tvap |> 
+  filter(cs_p13_1 != 99) |> 
+  mutate(
+    tvp_label = percent(tvp, accuracy = 1),
+    educacion = as.character(cs_p13_1)
+  ) |> 
+  ggplot(aes(educacion, tvp)) + 
+  geom_col(fill = "blue") + 
+  geom_text(aes(y = tvp + 0.005, label = tvp_label))
+```
+
+En resumen, queda así:
+
+```{r}
+# year_inicio <- 2005
+# year_final <- 2025
+# 
+# while (year_inicio <= year_final) {
+#   sdem <- descargar_modulo(year_inicio, 3, "sdem", "parquet")
+# 
+#   year_inicio <- year_inicio + 5 
+# }
+
+archivo_parquet <- list.files(file.path(here::here(), "ENOE"), "\\.parquet", full.names = TRUE)
+
+datos <- open_dataset(archivo_parquet, format = "parquet", unify_schemas = TRUE)
+
+datos_proc <- datos |>
+  # criterio general
+  filter(r_def == "0" & (c_res == "1" | c_res == "3") & eda7c != "0") |>
+  # población ocupada
+  filter(clase2 == "1") |>
+  # de 2005 a 2015 es fac y de 2020 a 2025 es fac_tri, se unifica
+  mutate(
+    ponderador = if_else(!is.na(fac), fac, fac_tri), 
+    ponderador = as.double(ponderador),
+    file = arrow::add_filename()
+  ) |> 
+  compute() |>
+  group_by(file, cs_p13_1) |> 
+  summarise(tot = sum(ponderador)) |> 
+  ungroup() |> 
+  collect()
+
+# nivel_edu_label <- tribble(
+#   ~cs_p13_1, ~nivel_edu_label,
+#   0, "Ninguna", 
+#   1, "Preescolar", 
+#   2, "Primaria", 
+#   3, "Secundaria", 
+#   4, "Preparatoria o bachillerato", 
+#   5, "Normal", 
+#   6, "Carrera técnica", 
+#   7, "Profesional", 
+#   8, "Maestría", 
+#   9, "Doctorado", 
+#   # 99, "No sabe"
+#   99, NA
+# )
+
+nivel_tipo_edu <- tribble(
+  ~cs_p13_1, ~tipo_edu, ~tipo_edu_label,
+  0, 0, "Menor a básica", 
+  1, 0, "Menor a básica", 
+  2, 1, "Básica", 
+  3, 1, "Básica", 
+  4, 2, "Media superior", 
+  5, 3, "Superior", 
+  6, 3, "Superior", 
+  7, 3, "Superior", 
+  8, 3, "Superior", 
+  9, 3, "Superior", 
+  99, NA, "No especificado"
+  # 99, NA, NA
+)
+
+tipo_edu_label <- nivel_tipo_edu |> 
+  distinct(tipo_edu, tipo_edu_label)
+
+datos_proc <- datos_proc |> 
+  mutate(
+    file = str_c("20", str_extract(file, "05|1\\d{1}|2\\d{1}")),
+    cs_p13_1 = as.double(cs_p13_1)
+  ) |> 
+  # left_join(nivel_edu_label, by = "cs_p13_1") |> 
+  left_join(nivel_tipo_edu, by = "cs_p13_1") |> 
+  select(-tipo_edu_label)
+
+tipo_edu_quin <- datos_proc |> 
+  # calcular porcentaje
+  group_by(file, tipo_edu) |> 
+  summarise(tot = sum(tot)) |> 
+  mutate(prop = tot / sum(tot)) |> 
+  ungroup() |> 
+  # calcular tasa de variación quinquenal
+  arrange(tipo_edu, file) |> 
+  group_by(tipo_edu) |> 
+  mutate(var = tot / lag(tot) - 1) |> 
+  ungroup()
+
+etiqueta <- setNames(
+  object = tipo_edu_label$tipo_edu_label,
+  nm = tipo_edu_label$tipo_edu
+)
+
+fig_prop <- tipo_edu_quin |> 
+  mutate(
+    prop_label = if_else(prop > 0.01, percent(prop, accuracy = 1), ""),
+    tipo_edu = as.character(tipo_edu)
+  ) |> 
+  ggplot(aes(file, prop, fill = tipo_edu, group = file)) + 
+  geom_col() +
+  geom_text(aes(label = prop_label), position = position_stack(vjust = 0.5)) + 
+  scale_x_discrete(name = NULL) +
+  scale_y_continuous(name = NULL, breaks = NULL, expand = 0) + 
+  scale_fill_brewer(
+    name = "Educación",
+    labels = etiqueta,
+    palette = "Set1",
+    na.value = "gray"
+  ) + 
+  theme_classic(base_size = 12, base_family = "Times New Roman") + 
+  theme(
+    axis.line = element_blank(),
+    axis.ticks = element_blank(),
+  ) + 
+  labs(
+    title = "Porcentaje de personas ocupadas por tipo de educación",
+    subtitle = "2005T3-2025T3",
+    caption = "Fuente. INEGI. Encuesta Nacional de Ocupación y Empleo (ENOE). 2005T3-2025T3."
+  )
+```
+
+Se valida
+
+```{r}
+fig_prop
+```
+
