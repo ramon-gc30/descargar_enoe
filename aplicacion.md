@@ -194,8 +194,8 @@ datos |>
       file                        tot1      tot2
       <chr>                      <dbl>     <dbl>
     1 ENOEN_SDEMT320.parquet        NA 126554112
-    2 SDEMT305.parquet       105077468        NA
-    3 SDEMT310.parquet       112552063        NA
+    2 SDEMT310.parquet       112552063        NA
+    3 SDEMT305.parquet       105077468        NA
     4 ENOE_SDEMT325.parquet         NA 130760049
     5 SDEMT315.parquet       119219891        NA
 
@@ -221,8 +221,8 @@ datos |>
       file                         tot
       <chr>                      <dbl>
     1 ENOEN_SDEMT320.parquet 126554112
-    2 SDEMT305.parquet       105077468
-    3 SDEMT310.parquet       112552063
+    2 SDEMT310.parquet       112552063
+    3 SDEMT305.parquet       105077468
     4 ENOE_SDEMT325.parquet  130760049
     5 SDEMT315.parquet       119219891
 
@@ -415,7 +415,7 @@ fig_prop <- datos_proc |>
     axis.ticks = element_blank(),
   ) + 
   labs(
-    title = "Porcentaje de personas ocupadas por tipo de educación",
+    title = "Porcentaje de personas ocupadas del mercado laboral \nde México por tipo de educación",
     subtitle = "2005T3-2025T3",
     caption = "Fuente. Elaboración propia con datos de la ENOE (INEGI) 2005T3-2025T3."
   )

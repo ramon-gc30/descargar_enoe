@@ -255,7 +255,7 @@ fig_prop <- datos_proc |>
     axis.ticks = element_blank(),
   ) + 
   labs(
-    title = "Porcentaje de personas ocupadas por tipo de educación",
+    title = "Porcentaje de personas ocupadas del mercado laboral \nde México por tipo de educación",
     subtitle = "2005T3-2025T3",
     caption = "Fuente. Elaboración propia con datos de la ENOE (INEGI) 2005T3-2025T3."
   )
