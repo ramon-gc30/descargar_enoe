@@ -1,3 +1,10 @@
+# Requisitos ==================================================================
+# library(tidyverse)
+# library(here)
+# library(foreign)
+# library(haven)
+# library(arrow)
+
 # Obtener todos los módulos sin enlace ========================================
 # arregla la función `importinegi::enoe`
 
@@ -112,7 +119,7 @@ descargar_enoe <- function(year, trimestre, formato = "csv")
     # archivos de salida
     archivo_parquet <- basename(archivo_temp)
     archivo_parquet <- sub("csv", "parquet", archivo_parquet)
-    directorio <- file.path(getwd(), "ENOE")
+    directorio <- here::here("datos")
     
     if (dir.exists(directorio) == FALSE) { dir.create(directorio) }
     
@@ -231,7 +238,7 @@ descargar_modulo <- function(year, trimestre, modulo = "sdem", formato = "csv")
     # archivos de salida
     archivo_parquet <- basename(archivo_temp)
     archivo_parquet <- sub("csv", "parquet", archivo_parquet)
-    directorio <- file.path(getwd(), "ENOE")
+    directorio <- here::here("datos")
     
     if (dir.exists(directorio) == FALSE) { dir.create(directorio) } 
     
